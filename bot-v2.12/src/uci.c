@@ -99,6 +99,8 @@ void write_bestmove(uint32_t Move) {
 
     /* Writes bestmove from bot */
 
+    if (Move == 0) return;
+
     char outputmove[6] = {0};
 
     move_to_uci_string(Move, outputmove);
