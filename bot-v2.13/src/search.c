@@ -18,6 +18,10 @@
 
 atomic_bool stop_search = false;
 
+int all_node = 0;
+int pv_nodes = 0;
+int cut_node = 0;
+int cut_node_early = 0;
 
 static inline int is_game_a_draw(struct GameState* Game) {
 
@@ -86,7 +90,7 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
     if (inCheck) {
         if (checkBuffer <= 0) {
            // return Eval(Game, &Search->eb);
-           inCheck = 0;
+           //inCheck = 0;
         }
         checkBuffer--; // Consume one check from the buffer
     }
@@ -130,6 +134,9 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
 
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
+
+        assert(Game->board[Game->white_king_square/8][Game->white_king_square%8] == KING);
+        assert(Game->board[Game->black_king_square/8][Game->black_king_square%8] == -KING);
 
         struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
         branchEval = -quiescence_search(Game, child_node, Search, -beta, -alpha, checkBuffer);
@@ -355,7 +362,7 @@ static inline int has_non_pawn_material(struct GameState* Game) {
     return phase;
 }
 
-static inline int null_prune(struct GameState* Game, struct NodeState Node, struct SearchContext* Search, int* null_eval, int beta) {
+static inline int null_prune(struct GameState* Game, struct NodeState Node, struct SearchContext* Search, int* null_eval, int beta, int pv_node) {
 
     if (Node.null_node) return 0;
 
@@ -365,7 +372,7 @@ static inline int null_prune(struct GameState* Game, struct NodeState Node, stru
     int king_rank = king_square / 8;
     int king_file = king_square % 8;
 
-    if (Node.depth >= NMP_MIN_DEPTH && has_non_pawn_material(Game) && is_king_safe(Game->board, king_rank, king_file, Game->side_to_move)) {
+    if (!pv_node && Node.depth >= NMP_MIN_DEPTH && has_non_pawn_material(Game) && is_king_safe(Game->board, king_rank, king_file, Game->side_to_move)) {
     
         struct UndoInfo ui;
         play_null_move(Game, &ui);
@@ -407,6 +414,10 @@ static inline void check_search_time(struct SearchContext* Search) {
     }
 }
 
+static inline void clear_killer_moves(struct SearchContext* Search, struct NodeState Node) {
+    Search->killer_moves[Node.ply + 1][0] = 0;
+    Search->killer_moves[Node.ply + 1][1] = 0;
+}
 int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeState Node, int alpha, int beta) {
 
     if (is_game_a_draw(Game)) return DRAW_SCORE;
@@ -420,6 +431,10 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     (Search->nodes)++;
 
 
+    int pv_node = (beta - alpha > 1);
+
+    //clear_killer_moves(Search, Node);
+
     Move hash_move = 0;
     int tt_eval;
     int tt_cutoff = probe_tt(&hash_move, alpha, beta, &tt_eval, Search, Node, Game);
@@ -429,9 +444,8 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     }
 
     int null_eval;
-    int null_cutoff = null_prune(Game, Node, Search, &null_eval, beta);
+    int null_cutoff = null_prune(Game, Node, Search, &null_eval, beta, pv_node);
     if (null_cutoff) return null_eval;
-
 
     const int initial_alpha = alpha;
     const int initial_beta = beta;
@@ -442,14 +456,15 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
     Move legal_moves[256];
     int move_count = generate_legal_moves(Game, legal_moves);
-
     if (move_count == 0) return handle_no_legal_moves(Game, Search, Node);
 
     int move_scores[256] = {0};
     evaluate_moves(Game, legal_moves, move_count, Node, move_scores, Search, hash_move); 
 
+    int moves_searched = 0;
     for (int k = 0; k < move_count; k++) {
 
+        moves_searched++;
         Search->pvLength[Node.ply + 1] = Node.ply + 1;
     
         pick_best_move_first(move_scores, legal_moves, move_count, k);
@@ -458,11 +473,20 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
                                                               
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
-        branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1};
+        if (pv_node && k == 0) {
+            branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        }
+        else {
+
+            branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+
+            if (pv_node && branch_eval > alpha && branch_eval < beta) {
+                branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+            }
+        }
 
         unmake_move(move, Game, &ui);
-
 
         update_best(&best, &best_move, move, branch_eval);
 
@@ -470,8 +494,17 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
         if (is_alpha_beta_cutoff(alpha, beta)) {
             cutoff_updates(Node, Search, move);
+
+            cut_node++;
+            if (k < 5) cut_node_early ++;
+
             break;
         }
+    }
+
+    if (moves_searched == move_count) {
+        if (!pv_node) all_node++;
+        else pv_nodes++;
     }
 
     store_position_tt(Node, Game, best_move, best, initial_alpha, initial_beta);
@@ -512,6 +545,7 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
 
     int best_score = NEGATIVE_INFINITY;
     Move best_move = 0;
+    int branch_eval;
 
     for (int k = 0; k < move_count; k++) {
 
@@ -521,7 +555,18 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
         make_move(move, Game, &ui);
 
         struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
-        int branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+
+        if (k == 0) {
+            branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        }
+        else {
+            branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+
+            if (branch_eval > alpha && branch_eval < beta) {
+                branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+            }
+        }
+        
         root_moves[k].eval = branch_eval;
 
         unmake_move(move, Game, &ui);
@@ -635,6 +680,10 @@ Move search_start(struct GameState Game, int depth, int time_left, int time_incr
 
     Move best_move = iterative_deepening(&Game, &Search);
 
+    printf("Cut nodes: %d\n", cut_node);
+    printf("Cut nodes at move < 5: %d\n", cut_node_early);
+    printf("All nodes: %d\n", all_node);
+    printf("Pv nodes: %d\n", pv_nodes);
     return best_move;
 }
 

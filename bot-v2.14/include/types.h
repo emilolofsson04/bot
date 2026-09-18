@@ -206,6 +206,7 @@ struct NodeState {
     int on_pv;
 
     int null_node;
+    int in_check;
 };
 
 

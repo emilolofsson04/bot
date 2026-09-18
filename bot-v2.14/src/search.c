@@ -15,9 +15,14 @@
 #include <string.h>
 #include "params.h"
 #include <assert.h>
+#include "board.h"
 
 atomic_bool stop_search = false;
 
+int all_node = 0;
+int pv_nodes = 0;
+int cut_node = 0;
+int cut_node_early = 0;
 
 static inline int is_game_a_draw(struct GameState* Game) {
 
@@ -58,6 +63,152 @@ static inline void pick_best_move_first(int eval[256], Move legal_moves[256], in
 }
 
 
+int is_ray_clear(int b[8][8], int r1, int f1, int r2, int f2, int dr, int df) {
+    int r = r1 + dr;
+    int f = f1 + df;
+    while (r != r2 || f != f2) {
+
+        if (b[r][f] != EMPTY) return 0; // Blocked by intermediate piece
+        r += dr;
+        f += df;
+    }
+    return 1;
+}
+
+int piece_gives_check(struct GameState* Game, Move move, int king_rank, int king_file) {
+    int from_sq = get_from_square(move);
+    int to_sq = get_to_square(move);
+
+    int to_r = to_sq / 8;
+    int to_f = to_sq % 8;
+
+    int piece_type = abs(Game->board[to_r][to_f]);
+
+    int dr = king_rank - to_r;
+    int df = king_file - to_f;
+    int abs_dr = abs(dr);
+    int abs_df = abs(df);
+
+    switch (piece_type) {
+        case PAWN: {
+            // White pawns attack "up" (-1 rank if rank 0 is top, or +1 rank if rank 0 is bottom)
+            int p_step = (Game->side_to_move == SIDE_WHITE) ? -1 : 1;
+            return (dr == p_step && abs_df == 1);
+        }
+        case KNIGHT:
+            return (abs_dr == 1 && abs_df == 2) || (abs_dr == 2 && abs_df == 1);
+
+        case BISHOP:
+            if (abs_dr == abs_df && abs_dr > 0) {
+                int step_r = (dr > 0) ? 1 : -1;
+                int step_f = (df > 0) ? 1 : -1;
+                return is_ray_clear(Game->board, to_r, to_f, king_rank, king_file, step_r, step_f);
+            }
+            return 0;
+
+        case ROOK:
+            if ((abs_dr == 0 && abs_df > 0) || (abs_df == 0 && abs_dr > 0)) {
+                int step_r = (dr == 0) ? 0 : ((dr > 0) ? 1 : -1);
+                int step_f = (df == 0) ? 0 : ((df > 0) ? 1 : -1);
+                return is_ray_clear(Game->board, to_r, to_f, king_rank, king_file, step_r, step_f);
+            }
+            return 0;
+
+        case QUEEN:
+            if (abs_dr == abs_df || abs_dr == 0 || abs_df == 0) {
+                int step_r = (dr == 0) ? 0 : ((dr > 0) ? 1 : -1);
+                int step_f = (df == 0) ? 0 : ((df > 0) ? 1 : -1);
+                return is_ray_clear(Game->board, to_r, to_f, king_rank, king_file, step_r, step_f);
+            }
+            return 0;
+
+        default:
+            return 0;
+    }
+}
+
+int sign(int val) {
+    return (val > 0) - (val < 0);
+}
+
+int is_ray_giving_check(struct GameState* Game, int k_r, int k_f, int dr, int df, int king_colour) {
+    int r = k_r + dr;
+    int f = k_f + df;
+
+        
+    while (r >= 0 && r < 8 && f >= 0 && f < 8 && Game->board[r][f] == EMPTY) {
+        r += dr;
+        f += df;
+    }
+
+    // Hit edge of board
+    if (r < 0 || r >= 8 || f < 0 || f >= 8) return 0;
+
+    int piece = Game->board[r][f];
+
+    // Check if the piece belongs to the attacker (enemy of king_colour)
+    // Assuming White > 0, Black < 0:
+    int is_enemy = (king_colour == SIDE_WHITE) ? (piece < 0) : (piece > 0);
+    if (!is_enemy) return 0;
+
+    int piece_type = abs(piece);
+
+    // Straight ray (orthogonal): Rook or Queen
+    if (dr == 0 || df == 0) {
+        return (piece_type == ROOK || piece_type == QUEEN);
+    }
+    // Diagonal ray: Bishop or Queen
+    if (abs(dr) == 1 && abs(df) == 1) {
+        return (piece_type == BISHOP || piece_type == QUEEN);
+    }
+
+    return 0;
+}
+
+int piece_discovers_check(struct GameState* Game, Move move, int king_rank, int king_file) {
+    int from_sq = get_from_square(move);
+    int from_r = from_sq / 8;
+    int from_f = from_sq % 8;
+
+    int d_rank = from_r - king_rank;
+    int d_file = from_f - king_file;
+
+    // 1. Orthogonal alignment (Rank or File)
+    if (d_rank == 0 || d_file == 0) {
+        int dr = sign(d_rank);
+        int df = sign(d_file);
+        return is_ray_giving_check(Game, king_rank, king_file, dr, df, Game->side_to_move);
+    }
+
+    // 2. Diagonal alignment
+    if (abs(d_rank) == abs(d_file)) {
+        int dr = sign(d_rank);
+        int df = sign(d_file);
+        return is_ray_giving_check(Game, king_rank, king_file, dr, df, Game->side_to_move);
+    }
+
+    // Not collinear with the enemy king -> discovered check is impossible
+    return 0;
+}
+
+int move_gives_check(struct GameState* Game, Move move) {
+
+
+    int king_square = (Game->side_to_move == SIDE_WHITE) ? Game->white_king_square : Game->black_king_square;
+    int king_rank = king_square / 8;
+    int king_file = king_square % 8;
+
+    int move_type = get_move_type(move);
+    if (move_type == EN_PASSANT || move_type == SHORT_CASTLE || move_type == LONG_CASTLE) return !is_king_safe(Game->board, king_rank, king_file, Game->side_to_move);
+
+    if (piece_gives_check(Game, move, king_rank, king_file)) return 1;
+    if (piece_discovers_check(Game, move, king_rank, king_file)) return 1;
+
+    return 0;
+}
+
+
+
 static int quiescence_search(struct GameState* Game, struct NodeState Node, struct SearchContext* Search, int alpha, int beta, int checkBuffer) {
 
 
@@ -72,21 +223,13 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
     Move legal_moves[256];
 
     // Evaluate if the king is safe
-    int inCheck = 0;
-    int king_square = (Game->side_to_move == SIDE_WHITE) ? Game->white_king_square : Game->black_king_square;
-    int king_rank = king_square / 8;
-    int king_file = king_square % 8;
-    
-    if (!is_king_safe(Game->board, king_rank, king_file, Game->side_to_move)) {
-        inCheck = 1;
-    }
+    int inCheck = Node.in_check;
     
 
     // Only allow so many check exstensions  
     if (inCheck) {
         if (checkBuffer <= 0) {
-           // return Eval(Game, &Search->eb);
-           inCheck = 0;
+            //return evaluate_position(Game);
         }
         checkBuffer--; // Consume one check from the buffer
     }
@@ -131,7 +274,9 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
 
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
+        int new_move_check = move_gives_check(Game, move);
+
+        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
         branchEval = -quiescence_search(Game, child_node, Search, -beta, -alpha, checkBuffer);
 
         // Evaluate alpha beta values
@@ -355,22 +500,18 @@ static inline int has_non_pawn_material(struct GameState* Game) {
     return phase;
 }
 
-static inline int null_prune(struct GameState* Game, struct NodeState Node, struct SearchContext* Search, int* null_eval, int beta) {
+static inline int null_prune(struct GameState* Game, struct NodeState Node, struct SearchContext* Search, int* null_eval, int beta, int pv_node) {
 
     if (Node.null_node) return 0;
 
     static const int R = NMP_BASE_REDUCTION;
     
-    int king_square = (Game->side_to_move == SIDE_WHITE) ? Game->white_king_square : Game->black_king_square;
-    int king_rank = king_square / 8;
-    int king_file = king_square % 8;
-
-    if (Node.depth >= NMP_MIN_DEPTH && has_non_pawn_material(Game) && is_king_safe(Game->board, king_rank, king_file, Game->side_to_move)) {
+    if (!pv_node && Node.depth >= NMP_MIN_DEPTH && has_non_pawn_material(Game) && !Node.in_check) {
     
         struct UndoInfo ui;
         play_null_move(Game, &ui);
 
-        struct NodeState null_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 - R, .null_node = 1 };
+        struct NodeState null_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 - R, .null_node = 1, .in_check = 0};
         *null_eval = -negamax(Game, Search, null_node, -beta, -beta + 1);
 
         unplay_null_move(Game, &ui);
@@ -381,8 +522,8 @@ static inline int null_prune(struct GameState* Game, struct NodeState Node, stru
         }
     }
     return 0;
-
 }
+
 
 static inline void check_search_time(struct SearchContext* Search) {
 
@@ -411,7 +552,7 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
     if (is_game_a_draw(Game)) return DRAW_SCORE;
     
-    if (Node.depth == 0)  return quiescence_search(Game, Node, Search, alpha, beta, 3);
+    if (Node.depth <= 0)  return quiescence_search(Game, Node, Search, alpha, beta, 3);
 
     check_search_time(Search);
     if (Search->timed_out)  return 0;
@@ -419,6 +560,8 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     (Search->es.nodes)++;
     (Search->nodes)++;
 
+
+    int pv_node = (beta - alpha > 1);
 
     Move hash_move = 0;
     int tt_eval;
@@ -429,7 +572,7 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     }
 
     int null_eval;
-    int null_cutoff = null_prune(Game, Node, Search, &null_eval, beta);
+    int null_cutoff = null_prune(Game, Node, Search, &null_eval, beta, pv_node);
     if (null_cutoff) return null_eval;
 
 
@@ -448,8 +591,10 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     int move_scores[256] = {0};
     evaluate_moves(Game, legal_moves, move_count, Node, move_scores, Search, hash_move); 
 
+    int moves_searched = 0;
     for (int k = 0; k < move_count; k++) {
 
+        moves_searched++;
         Search->pvLength[Node.ply + 1] = Node.ply + 1;
     
         pick_best_move_first(move_scores, legal_moves, move_count, k);
@@ -458,11 +603,23 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
                                                               
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
-        branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        int new_move_check = move_gives_check(Game, move);
+
+        if (pv_node && k == 0) {
+            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+            branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        }
+        else {
+
+            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+            branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+
+            if (pv_node && branch_eval > alpha && branch_eval < beta) {
+                branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+            }
+        }
 
         unmake_move(move, Game, &ui);
-
 
         update_best(&best, &best_move, move, branch_eval);
 
@@ -470,8 +627,17 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
         if (is_alpha_beta_cutoff(alpha, beta)) {
             cutoff_updates(Node, Search, move);
+
+            cut_node++;
+            if (k < 5) cut_node_early ++;
+
             break;
         }
+    }
+
+    if (moves_searched == move_count) {
+        if (!pv_node) all_node++;
+        else pv_nodes++;
     }
 
     store_position_tt(Node, Game, best_move, best, initial_alpha, initial_beta);
@@ -512,6 +678,7 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
 
     int best_score = NEGATIVE_INFINITY;
     Move best_move = 0;
+    int branch_eval;
 
     for (int k = 0; k < move_count; k++) {
 
@@ -520,8 +687,21 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
         struct UndoInfo ui;
         make_move(move, Game, &ui);
 
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 };
-        int branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        int new_move_check = move_gives_check(Game, move);
+        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+
+
+        if (k == 0) {
+            branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+        }
+        else {
+            branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+
+            if (branch_eval > alpha && branch_eval < beta) {
+                branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
+            }
+        }
+        
         root_moves[k].eval = branch_eval;
 
         unmake_move(move, Game, &ui);
@@ -635,6 +815,10 @@ Move search_start(struct GameState Game, int depth, int time_left, int time_incr
 
     Move best_move = iterative_deepening(&Game, &Search);
 
+    printf("Cut nodes: %d\n", cut_node);
+    printf("Cut nodes at move < 5: %d\n", cut_node_early);
+    printf("All nodes: %d\n", all_node);
+    printf("Pv nodes: %d\n", pv_nodes);
     return best_move;
 }
 
