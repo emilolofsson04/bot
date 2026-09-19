@@ -186,6 +186,8 @@ struct SearchContext {
     Move killer_moves[64][2];
     int history_table[64][64];
 
+    int silent;
+
     int max_depth;
     struct timespec start, now;
     int timed_out;

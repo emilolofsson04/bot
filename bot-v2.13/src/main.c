@@ -61,6 +61,9 @@ int main() {
         else if (strcmp(line, "stop") == 0) {
             stop_and_wait();
         }
+        else if (strncmp(line, "bench", 5) == 0) {
+            parse_bench(line);
+        }
         else
             printf("Unknown command: '%s'. \n", line);
     }

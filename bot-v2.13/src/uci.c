@@ -13,6 +13,8 @@
 #include "movegen.h"
 #include "playmove.h"
 #include "uci.h"
+#include "eval.h"
+#include "tt.h"
 
 
 
@@ -307,4 +309,64 @@ void parse_perft(char* command, struct GameState Game) {
 }
 
 
+
+
+static const char* BENCHMARK_FENS[] = {
+    // Start position
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    // Kiwipete
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
+    //Position 3
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
+    // Position 4
+    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+    // Position 5
+    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+    // Position 6
+    "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10"
+
+};
+void parse_bench(char* command) {
+
+    int search_depth = 10;
+    char* depth_ptr = strstr(command, "depth");
+    if (depth_ptr != NULL) {
+        sscanf(depth_ptr, "depth %d", &search_depth);
+    }
+    else {
+        sscanf(command, "bench %d", &search_depth);
+    }
+
+
+    uint64_t total_nodes = 0;
+
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+
+
+    int num_fens = 6;
+
+    for (int fen = 0; fen < num_fens; fen++){
+
+        struct GameState Game;
+        read_fen(BENCHMARK_FENS[fen], &Game);
+        initiate_evaluation(&Game);
+        struct SearchContext Search = { .max_depth = search_depth, .silent = 1 };
+        reset_tt();
+        iterative_deepening(&Game, &Search);
+
+        printf("[%3d] %s\n", fen + 1, BENCHMARK_FENS[fen]);
+        total_nodes += Search.nodes;
+
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    double time_taken_ms =
+        (double)(now.tv_sec - start.tv_sec) * 1000.0 +
+        (double)(now.tv_nsec - start.tv_nsec) / 1e6;
+
+
+    printf("Total nodes: %10ld | Time: %6.f ms | NPS: %7.f \n", total_nodes, time_taken_ms, (total_nodes * 1000 )/ time_taken_ms);
+}
 

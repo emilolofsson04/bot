@@ -581,7 +581,7 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
     return best_score;
 }
 
-static Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
+Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
 
     /* Runs the iteartive deepening loop, 
      finding and sorting root_moves for search_root to search */
@@ -647,7 +647,7 @@ static Move iterative_deepening(struct GameState* Game, struct SearchContext* Se
             (Search->now.tv_nsec - Search->start.tv_nsec) / 1e9;
 
         int who2play = (Game->side_to_move == SIDE_WHITE) ? 1 : -1;
-        write_info(root_moves[0].eval * who2play, iteration_depth, Search->nodes, time_taken, Search->pvLength[0], Search->pvTable);
+        if (!Search->silent) write_info(root_moves[0].eval * who2play, iteration_depth, Search->nodes, time_taken, Search->pvLength[0], Search->pvTable);
 
         if (Search->time_limit_ms) {
             if (previous_nodes) bf = (double)Search->nodes/previous_nodes;
@@ -680,10 +680,12 @@ Move search_start(struct GameState Game, int depth, int time_left, int time_incr
 
     Move best_move = iterative_deepening(&Game, &Search);
 
+    /*
     printf("Cut nodes: %d\n", cut_node);
     printf("Cut nodes at move < 5: %d\n", cut_node_early);
     printf("All nodes: %d\n", all_node);
     printf("Pv nodes: %d\n", pv_nodes);
+    */
     return best_move;
 }
 

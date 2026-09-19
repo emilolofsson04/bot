@@ -207,6 +207,10 @@ void read_fen(const char *fen_string, struct GameState* Game) {
     Game->zobrist_hash_3fold_history[Game->ply] = Game->zobrist_hash;
 
 }
+void set_up_startpos(struct GameState* Game) {
+    char start_fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 \0";
+    read_fen(start_fen, Game);
+}
 
 char piece_int_to_char(int p) {
     switch (p) {
