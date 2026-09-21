@@ -1,8 +1,5 @@
 #pragma once 
 
-#define MAX_DEPTH                  64
-#define MAX_MOVES                 256 
-
 #define INPUT_BUFFER_SIZE        8192
 #define ENGINE_MAX_DEPTH           30
 
@@ -11,12 +8,6 @@
 
 #define NMP_BASE_REDUCTION          2
 #define NMP_MIN_DEPTH               3
-
-#define LMR_MIN_MOVE                4
-#define LMR_MIN_DEPTH               5
-#define LMR_BASE                  0.5
-#define LMR_MULTIPLIER              1
-#define LMR_DIVISOR                 2
 
 #define TIME_MARGIN               1.2
 #define TIME_CHECK_INTERVAL      4096
@@ -38,7 +29,7 @@
 #define QUEEN_VALUE_CP            900
 #define KING_VALUE_CP            2000
 
-#define TIME_REMAINING_DIVISOR     30
-#define TIME_INCRAMENT_DIVISOR      2
+#define REMAINING_TIME_TO_USE    1/30
+#define INCREMENT_TIME_TO_USE     1/2
 
 #define TT_SIZE             (1u << 23)

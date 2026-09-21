@@ -5,6 +5,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "search.h"
 #include "perft.h"
 #include <pthread.h>
@@ -13,6 +14,8 @@
 #include "movegen.h"
 #include "playmove.h"
 #include "uci.h"
+#include "eval.h"
+#include "tt.h"
 
 
 
@@ -109,18 +112,35 @@ void write_bestmove(uint32_t Move) {
     fflush(stdout);
 }
 
-void write_info(int evaluation, int currentdepth, int nodes, float time, int pvLength, uint32_t pvTable[64][64]) {
+int get_hashfull(void) {
+    int count = 0;
+
+    int sample_size = (TT_SIZE < 1000) ? TT_SIZE : 1000;
+    if (sample_size == 0) return 0;
+
+    for (int i = 0; i < sample_size; i++) {
+
+        struct tt_entry* entry = &TT[i];
+        int tt_age = tt_generation - TT[i].generation;
+
+        if (entry->zobrist_key != 0 && tt_age == 0) {
+            count++;
+        }
+    }
+
+    return (count * 1000) / sample_size;
+}
+
+
+void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, float time, int pvLength, uint32_t pvTable[64][64]) {
 
     /* Writes info from bot */
 
     char ponder_str[6 * 64]; // Length of the longest move * longest pvTable
     int end_of_str = 0;
 
-    int move_to_print = currentdepth;
+    int move_to_print = (pvLength > currentdepth) ? currentdepth : pvLength;
 
-    if (abs(evaluation) > (90000)) {
-        move_to_print = pvLength;
-    }
     for (int i = 0; i < move_to_print; i++) {
 
         end_of_str += move_to_uci_string(pvTable[0][i], &ponder_str[end_of_str]); // Shift end with length of move string
@@ -133,7 +153,10 @@ void write_info(int evaluation, int currentdepth, int nodes, float time, int pvL
     }
     ponder_str[end_of_str] = '\0'; // I trust no null termination but my own
 
-    printf("info depth %2d score cp %5d nodes %9d nps %8.f time %5.f pv %s\n", currentdepth, evaluation, nodes, nodes/(time), 1000*time, ponder_str);
+    char* eval_string = (abs(evaluation) > MATE_IN_100_SCORE) ? "mate" : "cp  ";
+    if (evaluation > MATE_IN_100_SCORE) evaluation = (MATE_SCORE - evaluation) / 2 + 1;
+    if (evaluation < -MATE_IN_100_SCORE) evaluation = (-MATE_SCORE - evaluation) / 2 - 1;
+    printf("info depth %2d seldepth %2d score %4s %4d nodes %9d nps %8.f hashfull %4d time %5.f pv %s\n", currentdepth, sel_depth, eval_string, evaluation, nodes, nodes/(time), get_hashfull(), 1000*time, ponder_str);
 
     fflush(stdout);
 }
@@ -141,10 +164,12 @@ void write_info(int evaluation, int currentdepth, int nodes, float time, int pvL
 
 
 
+
+
 void parse_position(char* fen, struct GameState* Game) {
 
     char* fen_str_ptr        = strstr(fen, "fen");
-    char* move_str_ptr           = strstr(fen, "moves");
+    char* move_str_ptr       = strstr(fen, "moves");
     char* start_position_ptr = strstr(fen, "startpos");
 
     // If given fen, set up gamestate based on it
@@ -160,8 +185,7 @@ void parse_position(char* fen, struct GameState* Game) {
 
     // If we are given startpos, initiate gamestate from start position fen
     if (start_position_ptr != NULL) {
-        char start_fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 \0";
-        read_fen(start_fen, Game);
+        set_up_startpos(Game);
     }
 
 
@@ -233,7 +257,7 @@ void parse_go(char* command, struct GameState *Game) {
     char* node_ptr = strstr(command, "nodes");
 
     if (node_ptr != NULL) {
-        sscanf(node_ptr, "nodes %d", &params.node_limit);
+        sscanf(node_ptr, "nodes %ld", &params.node_limit);
     }
 
 
@@ -306,5 +330,74 @@ void parse_perft(char* command, struct GameState Game) {
     printf("NPS: %.0f\n", (float)perfstats.nodes / time_taken);
 }
 
+void print_board_state(struct GameState Game) {
+    char fen[1000];
+    write_fen(&Game, fen);
 
+    print_board(Game.board);
+    printf("Fen: %s", fen);
+    printf("Key: 0x%016" PRIx64 "\n", Game.zobrist_hash);
+}
+
+
+static const char* BENCHMARK_FENS[] = {
+    // Start position
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    // Kiwipete 
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
+    //Position 3
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
+    // Position 4
+    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+    // Position 5
+    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+    // Position 6
+    "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10"
+
+};
+void parse_bench(char* command) {
+    
+    int search_depth = 10;
+    char* depth_ptr = strstr(command, "depth");
+    if (depth_ptr != NULL) {
+        sscanf(depth_ptr, "depth %d", &search_depth);
+    }
+    else {
+        sscanf(command, "bench %d", &search_depth);
+    }
+
+
+    uint64_t total_nodes = 0;
+
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    init_lmr_table();
+
+    
+    int num_fens = 6;
+
+    for (int fen = 0; fen < num_fens; fen++){
+
+        struct GameState Game;
+        read_fen(BENCHMARK_FENS[fen], &Game);
+        initiate_evaluation(&Game);
+        struct SearchContext Search = { .max_depth = search_depth, .silent = 1 };
+
+        reset_tt();
+        iterative_deepening(&Game, &Search);
+
+        printf("[%3d] %s\n", fen + 1, BENCHMARK_FENS[fen]);
+        total_nodes += Search.nodes;
+
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    double time_taken_ms =
+        (double)(now.tv_sec - start.tv_sec) * 1000.0 +
+        (double)(now.tv_nsec - start.tv_nsec) / 1e6;
+
+
+    printf("Total nodes: %10ld | Time: %6.f ms | NPS: %7.f \n\n", total_nodes, time_taken_ms, (total_nodes * 1000 )/ time_taken_ms); 
+}
 

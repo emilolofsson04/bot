@@ -104,7 +104,7 @@ struct GameState {
     float time;
 };
 
-struct SearchCommands {
+struct SearchParams {
     struct GameState Game;
     int depth;
     int time_left;
@@ -186,10 +186,6 @@ struct SearchContext {
     Move killer_moves[64][2];
     int history_table[64][64];
 
-    int max_sel_depth;
-
-    int silent;
-
     int max_depth;
     struct timespec start, now;
     int timed_out;
@@ -210,7 +206,6 @@ struct NodeState {
     int on_pv;
 
     int null_node;
-    int in_check;
 };
 
 

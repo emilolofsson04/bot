@@ -1,4 +1,4 @@
-CC = gcc -O3 -march=native -flto -lm
+CC = gcc -O3 -march=native -flto
 #CC = gcc -fsanitize=undefined,address -g
 
 
