@@ -131,6 +131,7 @@ int get_hashfull(void) {
     return (count * 1000) / sample_size;
 }
 
+
 void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, float time, int pvLength, uint32_t pvTable[64][64]) {
 
     /* Writes info from bot */
@@ -152,13 +153,16 @@ void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, floa
     }
     ponder_str[end_of_str] = '\0'; // I trust no null termination but my own
 
-    char* eval_string = (abs(evaluation) > MATE_IN_100_SCORE) ? "mate" : "cp  "; 
+    char* eval_string = (abs(evaluation) > MATE_IN_100_SCORE) ? "mate" : "cp  ";
     if (evaluation > MATE_IN_100_SCORE) evaluation = (MATE_SCORE - evaluation) / 2 + 1;
     if (evaluation < -MATE_IN_100_SCORE) evaluation = (-MATE_SCORE - evaluation) / 2 - 1;
     printf("info depth %2d seldepth %2d score %4s %4d nodes %9d nps %8.f hashfull %4d time %5.f pv %s\n", currentdepth, sel_depth, eval_string, evaluation, nodes, nodes/(time), get_hashfull(), 1000*time, ponder_str);
 
     fflush(stdout);
 }
+
+
+
 
 
 
@@ -221,7 +225,7 @@ void stop_and_wait(void) {
 
 void *search(void *arg) {
 
-    struct SearchCommands *params = arg;
+    struct SearchParams *params = arg;
 
     Move best_move = search_start(params->Game, params->depth, params->time_left, params->increment, params->move_time, params->node_limit);
 
@@ -235,7 +239,7 @@ void *search(void *arg) {
 void parse_go(char* command, struct GameState *Game) {
 
 
-    struct SearchCommands params = {0};
+    struct SearchParams params = {0};
     params.Game = *Game;
 
     char* depth_ptr = strstr(command, "depth");
@@ -368,6 +372,7 @@ void parse_bench(char* command) {
     struct timespec start, now;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
+    init_lmr_table();
 
     
     int num_fens = 6;

@@ -2,6 +2,7 @@
 #include "types.h"
 #include <stdio.h>
 #include <time.h>
+
 #include "search.h"
 #include "movegen.h"
 #include "playmove.h"
@@ -15,6 +16,7 @@
 #include "params.h"
 #include <assert.h>
 #include "board.h"
+#include <math.h>
 
 atomic_bool stop_search = false;
 
@@ -22,6 +24,23 @@ int all_node = 0;
 int pv_nodes = 0;
 int cut_node = 0;
 int cut_node_early = 0;
+
+
+static uint8_t lmr_table[MAX_DEPTH][MAX_MOVES];
+
+void init_lmr_table(void) {
+    for (int depth = 0; depth < MAX_DEPTH; depth++) {
+        for (int move = 0; move < MAX_MOVES; move++) {
+
+            int reduction = LMR_BASE + LMR_MULTIPLIER * log(depth) * log(move) / LMR_DIVISOR;
+
+            if (reduction < 0)
+                reduction = 0;
+
+            lmr_table[depth][move] = (uint8_t)reduction;
+        }
+    }
+}
 
 
 static inline int is_game_a_draw(struct GameState* Game) {
@@ -326,7 +345,7 @@ static inline int probe_tt(Move* hash_move, int alpha, int beta,  int* return_ev
         *hash_move = entry->best_move;
     }
 
-    if (tt_age == 0 && entry->depth >= Node.depth) {
+    if ((tt_age == 0) && entry->depth >= Node.depth) {
 
         int entry_eval = entry->eval;
         if (entry_eval >= MATE_IN_100_SCORE) entry_eval -= Node.ply;
@@ -505,17 +524,14 @@ static inline int null_prune(struct GameState* Game, struct NodeState Node, stru
 
     if (Node.null_node) return 0;
 
-    int R = Params.nmp_base_reduction + Node.depth / Params.nmp_depth_divisor ;
+    static const int R = NMP_BASE_REDUCTION;
     
-    if (!pv_node && Node.depth >= Params.nmp_min_depth && has_non_pawn_material(Game) && !Node.in_check) {
+    if (!pv_node && Node.depth >= NMP_MIN_DEPTH && has_non_pawn_material(Game) && !Node.in_check) {
     
-        int reduced_depth = Node.depth - 1 - R;
-        if (reduced_depth < 1) reduced_depth = 1;
-
         struct UndoInfo ui;
         play_null_move(Game, &ui);
 
-        struct NodeState null_node = { .ply = Node.ply + 1, .depth = reduced_depth, .null_node = 1, .in_check = 0};
+        struct NodeState null_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 - R, .null_node = 1, .in_check = 0};
         *null_eval = -negamax(Game, Search, null_node, -beta, -beta + 1);
 
         unplay_null_move(Game, &ui);
@@ -608,21 +624,41 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
                                                               
-        int new_move_check = move_gives_check(Game, move);
+        int move_check = move_gives_check(Game, move);
 
         if (pv_node && k == 0) {
-            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = move_check };
             branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
         }
         else {
 
-            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+
+            int reduction = 0;
+            /*
+            if (k > 4 && Node.depth >= 5 && get_capture_flag(move) == QUIET && !move_check) {
+                reduction = 2;
+                if (k > 10 && Node.depth >= 7) reduction = 3;
+            }
+            */
+
+            if (k > LMR_MIN_MOVE && Node.depth >= LMR_MIN_DEPTH && get_capture_flag(move) == QUIET && !move_check) {
+                reduction = lmr_table[Node.depth][k];
+            }
+
+            struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1 - reduction, .in_check = move_check};
             branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+
+            if (reduction > 0 && branch_eval > alpha) {
+                child_node.depth = Node.depth - 1;
+                branch_eval = -negamax(Game, Search, child_node, -(alpha + 1), -alpha);
+            }
 
             if (pv_node && branch_eval > alpha && branch_eval < beta) {
                 branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
             }
         }
+
+
 
         unmake_move(move, Game, &ui);
 
@@ -754,8 +790,8 @@ Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
         int alpha = NEGATIVE_INFINITY;
         int beta  = POSITIVE_INFINITY;
 
-        if (iteration_depth > Params.aspiration_min_depth) {
-            int aspiration_delta = Params.aspiration_delta;
+        if (iteration_depth > ASPIRATION_MIN_DEPTH) {
+            int aspiration_delta = ASPIRATION_INITIAL_DELTA;
             alpha = last_eval - aspiration_delta;
             beta = last_eval + aspiration_delta;
         }
@@ -809,9 +845,9 @@ Move search_start(struct GameState Game, int depth, int time_left, int time_incr
 
     struct SearchContext Search = {0};
     initiate_evaluation(&Game);
-    
+    init_lmr_table();
 
-    Search.time_limit_ms = (time_left > 0) ? time_left * REMAINING_TIME_TO_USE + time_increment * INCREMENT_TIME_TO_USE : move_time;
+    Search.time_limit_ms = (time_left > 0) ? time_left / TIME_REMAINING_DIVISOR + time_increment /TIME_INCRAMENT_DIVISOR : move_time;
     Search.max_depth = (depth == 0) ? ENGINE_MAX_DEPTH : depth;
     Search.node_limit = node_limit;
     

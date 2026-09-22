@@ -10,11 +10,9 @@ void write_info(int evaluation, int currentdepth, int seldepth, int nodes, float
 void stop_and_wait(void);
 void parse_position(char* fen, struct GameState* Game);
 void parse_go(char* command, struct GameState *Game);
-void print_uci_options(void);
 void parse_perft(char* command, struct GameState Game);
 void print_board_state(struct GameState Game);
 void parse_bench(char* command);
-
 
 
 extern int searching;
