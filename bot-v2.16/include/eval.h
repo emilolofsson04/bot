@@ -106,7 +106,7 @@ static inline int mobility_evaluation(struct GameState* Game) {
     return mobility_score;
 }
 
-static inline int evaluate_position(struct GameState* Game) {
+static inline int evaluate_position(struct GameState* Game, int alpha, int beta) {
 
     int phase = Game->eval.white_phase + Game->eval.black_phase;
     if (phase > MAX_PHASE) phase = MAX_PHASE;
@@ -128,8 +128,15 @@ static inline int evaluate_position(struct GameState* Game) {
         if (b_count > 1) score += (b_count - 1) * DOUBLED_PAWN_PENALTY;
     }
 
-    score += mobility_evaluation(Game);
-    return (Game->side_to_move == SIDE_WHITE) ? score : -score;
+    score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
+
+    if (score < alpha - LAZY_MARGIN) return score + LAZY_MARGIN;
+    else if (score > beta + LAZY_MARGIN) return score - LAZY_MARGIN;
+
+
+    score += (Game->side_to_move == SIDE_WHITE) ? mobility_evaluation(Game): - mobility_evaluation(Game);
+
+    return score;
     
 }
 

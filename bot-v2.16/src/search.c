@@ -263,7 +263,7 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
     if (!inCheck) {
         //int old_StandPat = Eval(Game, &Search->eb);
 
-        StandPat = evaluate_position(Game);
+        StandPat = evaluate_position(Game, alpha, beta);
         //assert(abs(old_StandPat - StandPat) <= 3);
 
         // If standpat >= beta, black wont allow this position to be reached -> break

@@ -9,6 +9,7 @@
 #define LMR_MULTIPLIER              1
 #define LMR_DIVISOR                 2
 
+#define LAZY_MARGIN               120
 
 #define INPUT_BUFFER_SIZE        8192
 #define ENGINE_MAX_DEPTH           30
