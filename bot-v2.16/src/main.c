@@ -5,6 +5,7 @@
 #include "tt.h"
 #include "zobrist.h"
 #include "params.h"
+#include "board.h"
 
 
 
@@ -18,6 +19,8 @@ int main() {
 
     init_tt();
     init_zobrist();
+    init_default_params();
+    set_up_startpos(&Game);
 
     while (fgets(line, INPUT_BUFFER_SIZE, stdin) != NULL) {
 
@@ -29,15 +32,21 @@ int main() {
         if (strcmp(line, "uci") == 0) {
             printf("id name bot\n");
             printf("id author Emil\n");
+            printf("\n");
+            print_uci_options();
             printf("uciok\n");
         }
         else if (strcmp(line, "isready") == 0) {
             printf("readyok\n");
         }
+        else if (strncmp(line, "setoption", 9) == 0) {
+            set_option(line);
+        }
         else if (strcmp(line, "ucinewgame") == 0) {
             stop_and_wait();
             reset_tt();
             Game = (struct GameState){0};
+            set_up_startpos(&Game);
  
         }
         else if (strncmp(line, "position ", 9) == 0) {
@@ -60,6 +69,12 @@ int main() {
         }
         else if (strcmp(line, "stop") == 0) {
             stop_and_wait();
+        }
+        else if (strcmp(line, "d") == 0) {
+            print_board_state(Game);
+        }
+        else if (strncmp(line, "bench", 5) == 0) {
+            parse_bench(line);
         }
         else
             printf("Unknown command: '%s'. \n", line);

@@ -44,6 +44,67 @@ static inline void initiate_evaluation(struct GameState* Game) {
        }
     }
 }
+static const int knight_mobility[8][8] = {
+    { 2, 3, 4, 4, 4, 4, 3, 2 },
+    { 3, 4, 6, 6, 6, 6, 4, 3 },
+    { 4, 6, 8, 8, 8, 8, 6, 4 },
+    { 4, 6, 8, 8, 8, 8, 6, 4 },
+    { 4, 6, 8, 8, 8, 8, 6, 4 },
+    { 4, 6, 8, 8, 8, 8, 6, 4 },
+    { 3, 4, 6, 6, 6, 6, 4, 3 },
+    { 2, 3, 4, 4, 4, 4, 3, 2 }
+};
+
+static const int dr[8] = {
+     1,      0,     -1,      0,      1,     -1,     -1,      1
+};
+
+static const int df[8] = {
+     0,      1,      0,     -1,      1,      1,     -1,     -1
+};
+
+static inline int piece_mobility(struct GameState* Game, struct piece Piece) {
+
+    int piece_type = abs(Piece.type);
+    if (piece_type == PAWN || piece_type == KING) return 0;
+    
+    int piece_rank = Piece.rank;
+    int piece_file = Piece.file;
+
+    if (piece_type == KNIGHT) return 2 * knight_mobility[piece_rank][piece_file];
+
+    int mobility_score = 0;
+    int start_index = (piece_type == BISHOP) ? 4 : 0; 
+    int end_index = (piece_type == ROOK) ? 4 : 8; 
+
+    int weight = 1;
+    if (piece_type == ROOK) weight = 3;
+    if (piece_type == BISHOP) weight = 5;
+    for (int dir = start_index; dir < end_index; dir++) {
+        int r = piece_rank + dr[dir];
+        int f = piece_file + df[dir];
+
+        while (r >= 0 && r < 8 && f >= 0 && f < 8 && Game->board[r][f] == EMPTY) {
+
+            mobility_score += weight;
+            r += dr[dir];
+            f += df[dir];
+        }
+    }
+    return mobility_score;
+}
+static inline int mobility_evaluation(struct GameState* Game) {
+    int mobility_score = 0;
+    for (int i = 0; i < 16; i++) {
+        
+        struct piece wpiece = Game->white_pieces[i]; 
+        if (wpiece.alive) mobility_score += piece_mobility(Game, wpiece);
+
+        struct piece bpiece = Game->black_pieces[i]; 
+        if (bpiece.alive) mobility_score -= piece_mobility(Game, bpiece);
+    }
+    return mobility_score;
+}
 
 static inline int evaluate_position(struct GameState* Game) {
 
@@ -67,6 +128,7 @@ static inline int evaluate_position(struct GameState* Game) {
         if (b_count > 1) score += (b_count - 1) * DOUBLED_PAWN_PENALTY;
     }
 
+    score += mobility_evaluation(Game);
     return (Game->side_to_move == SIDE_WHITE) ? score : -score;
     
 }

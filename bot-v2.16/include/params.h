@@ -1,13 +1,25 @@
 #pragma once 
 
+#define MAX_DEPTH                  64
+#define MAX_MOVES                 256
+
+#define LMR_MIN_MOVE                4
+#define LMR_MIN_DEPTH               5
+#define LMR_BASE                  0.5
+#define LMR_MULTIPLIER              1
+#define LMR_DIVISOR                 2
+
+
 #define INPUT_BUFFER_SIZE        8192
 #define ENGINE_MAX_DEPTH           30
 
-#define ASPIRATION_INITIAL_DELTA   60
-#define ASPIRATION_MIN_DEPTH        5
+#define DEFAULT_ASPIRATION_DELTA        60
+#define DEFAULT_ASPIRATION_MIN_DEPTH     5
 
-#define NMP_BASE_REDUCTION          2
-#define NMP_MIN_DEPTH               3
+#define DEFAULT_NMP_BASE_REDUCTION       2
+#define DEFAULT_NMP_MIN_DEPTH            3
+#define DEFAULT_NMP_DEPTH_DIVISOR        3
+
 
 #define TIME_MARGIN               1.2
 #define TIME_CHECK_INTERVAL      4096
@@ -33,3 +45,17 @@
 #define INCREMENT_TIME_TO_USE     1/2
 
 #define TT_SIZE             (1u << 23)
+
+
+struct SearchParams {
+    int aspiration_delta;
+    int aspiration_min_depth;
+    int nmp_base_reduction;
+    int nmp_min_depth;
+    int nmp_depth_divisor;
+};
+
+extern struct SearchParams Params;
+void init_default_params(void);
+void print_uci_options(void);
+void set_option(const char* line);

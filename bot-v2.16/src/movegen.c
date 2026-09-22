@@ -14,51 +14,8 @@
 
 
 
-/*
 
-static inline void register_move(Move legal_moves[256], int* total_moves, int rank, int file, int pInd, int piece_side, int target_rank, int target_file, int capture, int type, int movetype) {
-
-
-    int idx = *total_moves;
-    if (movetype != PROMOTION) {
-        Move* m = &legal_moves[idx];
-
-        m->start_rank = rank;
-        m->start_file = file;
-        m->target_rank = target_rank;
-        m->target_file = target_file;
-        m->colour = piece_side;
-        m->piece_type = type;
-        m->piece_struct_index = pInd;
-        m->captured_piece_index = -1; // Change later (in play_move) if a piece was captured
-        m->move_type = movetype;
-        m->capture = capture;
-        m->promotion_type = -1;
-
-        *total_moves = idx + 1;
-    }
-    else { // If promotion, record 4 moves with diffrent promotion pieces
-        for (int i = 0; i < 4; i++) {
-            Move* m = &legal_moves[idx + i];
-
-            m->start_rank = rank;
-            m->start_file = file;
-            m->target_rank = target_rank;
-            m->target_file = target_file;
-            m->colour = piece_side;
-            m->piece_type = type;
-            m->piece_struct_index = pInd;
-            m->captured_piece_index = -1; // Change later (in play_move) if a piece was captured
-            m->move_type = movetype;
-            m->capture = capture;
-            m->promotion_type = i;
-        }
-        *total_moves = idx + 4;
-    }
-}
-*/
-
-static inline void register_move(Move legal_moves[256], int* total_moves, int rank, int file, int pInd, int piece_side, int target_rank, int target_file, int capture, int type, int movetype) {
+static inline void register_move(Move legal_moves[256], int* total_moves, int rank, int file, int pInd, int target_rank, int target_file, int capture, int movetype) {
     /*
      Updates the list of moves with a new struct.
      */
@@ -154,12 +111,12 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
 
                         // If free, record move
                         if (target_square == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // else record capture if enemy, and break since we hit a piece
                         else {
                             if (allied_sign * target_square < 0) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                             break; 
                         }
@@ -189,11 +146,11 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
 
                         // If free, record quiet move
                         if (Game->board[target_rank][target_file] == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                         }
                     }
                         
@@ -221,7 +178,7 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
 
                         // If free and fdir = 0 -> record quiet walk and check if two step walk allowed
                         if (target_square == EMPTY && pfdirs[k] == 0) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, movetype);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, movetype);
 
                             // Check if we are allowed one more step
                             if (((piece_side && (rank == 1)) || (!piece_side && rank == 6))) {
@@ -231,20 +188,20 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
                                 // Always on Game->board since df = 0 and we are on starting rank
                                 target_square = Game->board[target_rank][target_file];
                                 if (target_square == EMPTY) {
-                                    register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                                    register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                                 }
                             }
                         }
                         // Possible capture? 
                         else if (target_square * allied_sign < 0 && pfdirs[k] != 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, movetype);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, movetype);
                         }
                         
                         // En passant check
                         else if (Game->en_passant_square != -1 
                                 && target_rank == Game->en_passant_square/8 
                                 && target_file == Game->en_passant_square % 8) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, EN_PASSANT);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, EN_PASSANT);
                         }
                     }
                 }
@@ -264,11 +221,11 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
 
                         // If free, record quiet move
                         if (target_square == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                         }
                     }
 
@@ -300,7 +257,7 @@ void find_semi_moves(int* total_semi_quiet, int* total_semi_captures, Move semi_
                     if (!blocked && is_king_safe(Game->board, rank, file, piece_side)
                                  && is_king_safe(Game->board, rank, file + df, piece_side)
                                  && is_king_safe(Game->board, rank, file + 2*df, piece_side)) {
-                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, rank, rookFile[k], QUIET, type, movetype);
+                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, rank, rookFile[k], QUIET, movetype);
                     }
                 }
             }
@@ -521,7 +478,7 @@ static inline void generate_pseudo_captures(int* total_semi_captures, Move semi_
                         // else record capture if enemy, and break since we hit a piece
                         if (target_square != EMPTY) {
                             if (allied_sign * target_square < 0) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                             break;
                         }
@@ -557,7 +514,7 @@ static inline void generate_pseudo_captures(int* total_semi_captures, Move semi_
                         if (Game->board[target_rank][target_file] != EMPTY) {
                         // Else if enemy record capture
                             if (target_square * allied_sign < 0) {
-                                 register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                 register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                         }
                     }
@@ -599,14 +556,14 @@ static inline void generate_pseudo_captures(int* total_semi_captures, Move semi_
                         }
                         // Possible capture?
                         else if (target_square * allied_sign < 0 && pfdirs[k] != 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, movetype);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, movetype);
                         }
 
                         // En passant check
                         else if (Game->en_passant_square != -1
                                 && target_rank == Game->en_passant_square/8
                                 && target_file == Game->en_passant_square % 8) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, EN_PASSANT);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, EN_PASSANT);
                         }
                     }
                 }
@@ -628,7 +585,7 @@ static inline void generate_pseudo_captures(int* total_semi_captures, Move semi_
                         // Else if enemy record capture
                         if (target_square != EMPTY) {
                             if (target_square * allied_sign < 0) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                         }
                     }
@@ -730,12 +687,12 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
 
                         // If free, record move
                         if (target_square == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // else record capture if enemy, and break since we hit a piece
                         else {
                             if (allied_sign * target_square < 0) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                             break;
                         }
@@ -769,11 +726,11 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
 
                         // If free, record quiet move
                         if (Game->board[target_rank][target_file] == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                         }
                     }
 
@@ -811,7 +768,7 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
 
                         // If free and fdir = 0 -> record quiet walk and check if two step walk allowed
                         if (target_square == EMPTY && pfdirs[k] == 0) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, movetype);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, movetype);
 
                             // Check if we are allowed one more step
                             if (((piece_side && (rank == 1)) || (!piece_side && rank == 6))) {
@@ -821,20 +778,20 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
                                 // Always on Game->board since df = 0 and we are on starting rank
                                 target_square = Game->board[target_rank][target_file];
                                 if (target_square == EMPTY) {
-                                    register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                                    register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                                 }
                             }
                         }
                         // Possible capture?
                         else if (target_square * allied_sign < 0 && pfdirs[k] != 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, movetype);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, movetype);
                         }
 
                         // En passant check
                         else if (Game->en_passant_square != -1
                                 && target_rank == Game->en_passant_square/8
                                 && target_file == Game->en_passant_square % 8) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, EN_PASSANT);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, EN_PASSANT);
                         }
                     }
                 }
@@ -854,11 +811,11 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
 
                         // If free, record quiet move
                         if (target_square == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                         }
                     }
 
@@ -890,7 +847,7 @@ static inline void generate_pseudo_moves(int* total_semi_quiet, int* total_semi_
                     if (!blocked && is_king_safe(Game->board, rank, file, piece_side)
                                  && is_king_safe(Game->board, rank, file + df, piece_side)
                                  && is_king_safe(Game->board, rank, file + 2*df, piece_side)) {
-                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, rank, rookFile[k], QUIET, type, movetype);
+                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, rank, rookFile[k], QUIET, movetype);
                     }
                 }
             }
@@ -1037,14 +994,14 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                         // If free, record move
                         if (target_square == EMPTY) {
                             if (allowed_squares[target_rank][target_file]) { 
-                              register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                              register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                             }
                         }
                         // else record capture if enemy, and break since we hit a piece
                         else {
                             if (allied_sign * target_square < 0) {
                                 if (allowed_squares[target_rank][target_file]) {
-                                    register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                    register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                                 }
                             }
                             break;
@@ -1080,13 +1037,13 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                         // If free, record quiet move
                         if (Game->board[target_rank][target_file] == EMPTY) {
                             if (allowed_squares[target_rank][target_file]) {
-                                register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                                register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                             }
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
                             if (allowed_squares[target_rank][target_file]) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                             }
                         }
                     }
@@ -1126,7 +1083,7 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                         // If free and fdir = 0 -> record quiet walk and check if two step walk allowed
                         if (target_square == EMPTY && pfdirs[k] == 0) {
                             if (allowed_squares[target_rank][target_file]) {
-                                register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, movetype);
+                                register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, movetype);
                             }
 
                             // Check if we are allowed one more step
@@ -1138,7 +1095,7 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                                 target_square = Game->board[target_rank][target_file];
                                 if (target_square == EMPTY) {
                                     if (allowed_squares[target_rank][target_file]) {
-                                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                                        register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                                     }
                                 }
                             }
@@ -1146,7 +1103,7 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                         // Possible capture?
                         else if (target_square * allied_sign < 0 && pfdirs[k] != 0) {
                             if (allowed_squares[target_rank][target_file]) {
-                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, movetype);
+                                register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, movetype);
                             }
                         }
 
@@ -1154,7 +1111,7 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
                         else if (Game->en_passant_square != -1
                                 && target_rank == Game->en_passant_square/8
                                 && target_file == Game->en_passant_square % 8) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, EN_PASSANT);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, EN_PASSANT);
                         }
                     }
                 }
@@ -1174,11 +1131,11 @@ static inline void generate_pseudo_evasions(int* total_semi_quiet, int* total_se
 
                         // If free, record quiet move
                         if (target_square == EMPTY) {
-                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, piece_side, target_rank, target_file, QUIET, type, STANDARD);
+                            register_move(semi_quiet_moves, total_semi_quiet, rank, file, pInd, target_rank, target_file, QUIET, STANDARD);
                         }
                         // Else if enemy record capture
                         else if (target_square * allied_sign < 0) {
-                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, piece_side, target_rank, target_file, CAPTURE, type, STANDARD);
+                            register_move(semi_capture_moves, total_semi_captures, rank, file, pInd, target_rank, target_file, CAPTURE, STANDARD);
                         }
                     }
 

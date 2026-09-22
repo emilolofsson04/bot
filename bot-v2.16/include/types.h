@@ -17,7 +17,6 @@ enum Mask { FROM_MASK = 63 << FROM_SHIFT, TO_MASK = 63 << TO_SHIFT, PIECE_INDEX_
     MOVE_MASK = FROM_MASK | TO_MASK | MOVE_TYPE_MASK | CAPTURE_MASK | PROMOTION_TYPE_MASK
 };
 
-enum EVAL { BISHOP_PAIR_BONUS = 10, DOUBLED_PAWN_PENALTY = 5 };
 typedef uint32_t Move;
 
 static inline int moves_match(Move a, Move b) {
@@ -104,7 +103,7 @@ struct GameState {
     float time;
 };
 
-struct SearchParams {
+struct SearchCommands {
     struct GameState Game;
     int depth;
     int time_left;
@@ -186,6 +185,10 @@ struct SearchContext {
     Move killer_moves[64][2];
     int history_table[64][64];
 
+    int max_sel_depth;
+
+    int silent;
+
     int max_depth;
     struct timespec start, now;
     int timed_out;
@@ -206,6 +209,7 @@ struct NodeState {
     int on_pv;
 
     int null_node;
+    int in_check;
 };
 
 
