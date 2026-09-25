@@ -4,6 +4,10 @@
 #include "types.h"
 #include "pst.h"
 
+extern uint64_t passed_pawn_masks[2][64];
+
+void init_evaluation_masks(void);
+
 static inline void initiate_evaluation(struct GameState* Game) {
 
     Game->eval = (struct Evaluation){0};
@@ -134,34 +138,21 @@ static inline int king_mobility_danger(struct GameState* Game) {
 }
 static inline int passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_pawns) {
 
-    int passed_eval = 0;
+    int total_bonus = 0;
         
-    static const uint64_t FILE_A = 0x0101010101010101ULL;
     static const int passed_bonus[8] = { 0, 5, 10, 20, 45, 90, 160, 0 };
 
     while (allied_pawns) {
         int square = __builtin_ctzll(allied_pawns);
 
-        int rank = square / 8;
-        int file = square % 8;
-
-        uint64_t files = FILE_A << file;
-        if (file > 0) files |= FILE_A << (file - 1);
-        if (file < 7) files |= FILE_A << (file + 1);
-
-        if (side == SIDE_WHITE) {
-            uint64_t above =  ~0ULL << (8 * (rank + 1ULL));
-            uint64_t blocked = (files &  above) & enemy_pawns;
-            if (!blocked) passed_eval += passed_bonus[rank];
+        if (!(passed_pawn_masks[side][square] & enemy_pawns)) {
+            int relative_rank = (side == SIDE_WHITE) ? (square / 8) : (7 - (square / 8));
+            total_bonus += passed_bonus[relative_rank];
         }
-        else {
-            uint64_t below = (1ULL << (8 * rank)) - 1ULL;
-            uint64_t blocked = (files & below) & enemy_pawns;
-            if (!blocked) passed_eval += passed_bonus[7 - rank];
-        }
+
         allied_pawns &= allied_pawns - 1;
     }
-    return passed_eval;
+    return total_bonus;
 }
 
 static inline int evaluate_position(struct GameState* Game, int alpha, int beta) {

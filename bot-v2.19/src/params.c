@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "search.h"
+#include "eval.h"
 
 struct SearchParams Params;
 
@@ -29,6 +30,7 @@ void init_default_params(void) {
         *(OPTIONS_TABLE[option].target_val) = OPTIONS_TABLE[option].default_val;
     }
     init_lmr_table();
+    init_evaluation_masks();
 }
 
 void print_uci_options(void) {
