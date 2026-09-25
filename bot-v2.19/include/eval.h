@@ -191,7 +191,7 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
 
     int passed_pawns_score = passed_pawns(SIDE_WHITE, Game->eval.white_pawns, Game->eval.black_pawns) - passed_pawns(SIDE_BLACK, Game->eval.black_pawns, Game->eval.white_pawns);
 
-    score += passed_pawns_score;
+    score += ((MAX_PHASE - phase)* passed_pawns_score / MAX_PHASE;
 
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
 
