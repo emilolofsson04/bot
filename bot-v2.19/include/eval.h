@@ -132,12 +132,12 @@ static inline int king_mobility_danger(struct GameState* Game) {
     return w_king_mobility - b_king_mobility;
 
 }
-
 static inline int passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_pawns) {
 
     int passed_eval = 0;
         
     static const uint64_t FILE_A = 0x0101010101010101ULL;
+    static const int passed_bonus[8] = { 0, 5, 10, 20, 45, 90, 160, 0 };
 
     while (allied_pawns) {
         int square = __builtin_ctzll(allied_pawns);
@@ -150,14 +150,14 @@ static inline int passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_p
         if (file < 7) files |= FILE_A << (file + 1);
 
         if (side == SIDE_WHITE) {
-            uint64_t above =  ~0LL << (8 * (rank + 1ULL));
+            uint64_t above =  ~0ULL << (8 * (rank + 1ULL));
             uint64_t blocked = (files &  above) & enemy_pawns;
-            if (!blocked) passed_eval += rank * 30;
+            if (!blocked) passed_eval += passed_bonus[rank];
         }
         else {
-            uint64_t below = (1LL << (8 * rank)) - 1ULL;
+            uint64_t below = (1ULL << (8 * rank)) - 1ULL;
             uint64_t blocked = (files & below) & enemy_pawns;
-            if (!blocked) passed_eval -= (7 - rank) * 30;
+            if (!blocked) passed_eval += passed_bonus[7 - rank];
         }
         allied_pawns &= allied_pawns - 1;
     }
@@ -191,7 +191,7 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
 
     int passed_pawns_score = passed_pawns(SIDE_WHITE, Game->eval.white_pawns, Game->eval.black_pawns) - passed_pawns(SIDE_BLACK, Game->eval.black_pawns, Game->eval.white_pawns);
 
-    score += ((MAX_PHASE - phase)* passed_pawns_score / MAX_PHASE;
+    score += ((MAX_PHASE - phase)* passed_pawns_score) / MAX_PHASE;
 
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
 
