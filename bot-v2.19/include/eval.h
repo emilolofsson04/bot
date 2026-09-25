@@ -133,8 +133,35 @@ static inline int king_mobility_danger(struct GameState* Game) {
 
 }
 
-static inline int passed_pawns(struct GameState* Game) {
-    
+static inline int passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_pawns) {
+
+    int passed_eval = 0;
+        
+    static const uint64_t FILE_A = 0x0101010101010101ULL;
+
+    while (allied_pawns) {
+        int square = __builtin_ctzll(allied_pawns);
+
+        int rank = square / 8;
+        int file = square % 8;
+
+        uint64_t files = FILE_A << file;
+        if (file > 0) files |= FILE_A << (file - 1);
+        if (file < 7) files |= FILE_A << (file + 1);
+
+        if (side == SIDE_WHITE) {
+            uint64_t above =  ~0LL << (8 * (rank + 1ULL));
+            uint64_t blocked = (files &  above) & enemy_pawns;
+            if (!blocked) passed_eval += rank * 30;
+        }
+        else {
+            uint64_t below = (1LL << (8 * rank)) - 1ULL;
+            uint64_t blocked = (files & below) & enemy_pawns;
+            if (!blocked) passed_eval -= (7 - rank) * 30;
+        }
+        allied_pawns &= allied_pawns - 1;
+    }
+    return passed_eval;
 }
 
 static inline int evaluate_position(struct GameState* Game, int alpha, int beta) {
@@ -162,7 +189,13 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
         if (b_count > 1) score += (b_count - 1) * DOUBLED_PAWN_PENALTY;
     }
 
+    int passed_pawns_score = passed_pawns(SIDE_WHITE, Game->eval.white_pawns, Game->eval.black_pawns) - passed_pawns(SIDE_BLACK, Game->eval.black_pawns, Game->eval.white_pawns);
+
+    score += passed_pawns_score;
+
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
+
+
 
     if (score < alpha - LAZY_MARGIN) return score + LAZY_MARGIN;
     else if (score > beta + LAZY_MARGIN) return score - LAZY_MARGIN;
@@ -175,100 +208,5 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
     
 }
 
-static inline int Eval(struct GameState* Game) {
-
-    /*
-     Evaluates a postion from scratch,
-     returning a int value of the difference
-     in value for white and black.
-     Goal is to make this based on previous
-     evals, to lessen the amount of
-     computation needed.
-     */
-
-    int w_material_sum = 0;
-    int b_material_sum = 0;
-
-    int w_early_sum = 0;
-    int b_early_sum = 0;
-
-    int w_late_sum = 0;
-    int b_late_sum = 0;
-
-    int w_final_sum = 0;
-    int b_final_sum = 0;
-
-    struct piece* wPieces = Game->white_pieces;
-    struct piece* bPieces = Game->black_pieces;
-
-    int who2play = (Game->side_to_move == SIDE_WHITE) ? 1 : -1;
-
-    int white_pawn_files[8] = {0};
-    int black_pawn_files[8] = {0};
-    int doubled_pawn = DOUBLED_PAWN_PENALTY;
-
-    int wBishops = 0;
-    int bBishops = 0;
-
-    int phase = 0;
-
-    for (int i = 0; i < 16; i++) {
-       if (wPieces[i].alive) {
-           int type = wPieces[i].type;
-            w_material_sum += piece_values[type];
-            phase += game_stage_values[type];
-
-            w_early_sum += EarlyPST[type][wPieces[i].rank][wPieces[i].file];
-            w_late_sum  += LatePST[type][wPieces[i].rank][wPieces[i].file];
-            if (type == PAWN) {
-                white_pawn_files[wPieces[i].file]++;
-                if (white_pawn_files[wPieces[i].file] > 1) {
-                    w_final_sum -= doubled_pawn;
-                }
-                
-            }
-            if (type == BISHOP) {
-                wBishops++;
-                if (wBishops == 2) w_final_sum += BISHOP_PAIR_BONUS;
-
-            }
-       }
-       if (bPieces[i].alive) {
-            int type = abs(bPieces[i].type);
-            int rank = 7 - bPieces[i].rank;
-            b_material_sum += piece_values[abs(type)];
-            phase += game_stage_values[abs(type)];
-
-            b_early_sum += EarlyPST[type][rank][bPieces[i].file];
-            b_late_sum  += LatePST[type][rank][bPieces[i].file];
-
-            if (type == PAWN) {
-                black_pawn_files[bPieces[i].file]++;
-                if (black_pawn_files[bPieces[i].file] > 1) {
-                    b_final_sum -= doubled_pawn;
-                }
-
-            }
-            if (type == BISHOP) {
-                bBishops++;
-                if (bBishops == 2) b_final_sum += BISHOP_PAIR_BONUS;
-            }
-       }
-    }
-
-    if (phase > MAX_PHASE) phase = MAX_PHASE;
-    w_final_sum += w_material_sum;
-
-    w_final_sum += (w_early_sum * phase + w_late_sum * (MAX_PHASE - phase) + MAX_PHASE / 2) / MAX_PHASE;
-
-    b_final_sum += b_material_sum;
-
-    b_final_sum += (b_early_sum * phase + b_late_sum * (MAX_PHASE - phase) + MAX_PHASE / 2) / MAX_PHASE;
-
-
-    if ((w_final_sum - b_final_sum) == DRAW_SCORE) return 1;
-    return who2play * (w_final_sum - b_final_sum);
-
-}
 
 #endif
