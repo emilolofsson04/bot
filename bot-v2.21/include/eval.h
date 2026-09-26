@@ -184,6 +184,29 @@ static inline int evaluate_isolated_pawns(uint64_t allied_pawns) {
     return eval;
 }
 
+
+static inline int evaluate_defended_pawns(uint64_t white_pawns, uint64_t black_pawns) {
+
+
+    static const uint64_t NOT_FILE_A = 0xfefefefefefefefeULL;
+    static const uint64_t NOT_FILE_H = 0x7f7f7f7f7f7f7f7fULL;
+
+    uint64_t w_attacks = ((white_pawns & NOT_FILE_H) << 9) | ((white_pawns & NOT_FILE_A) << 7);
+
+    uint64_t b_attacks = ((black_pawns & NOT_FILE_A) >> 9) | ((black_pawns & NOT_FILE_H) >> 7);
+
+    uint64_t defended_white_pawns = white_pawns & w_attacks;
+    uint64_t defended_black_pawns = black_pawns & b_attacks;
+
+    int w_defended_count = __builtin_popcountll(defended_white_pawns);
+    int b_defended_count = __builtin_popcountll(defended_black_pawns);
+
+
+    return DEFENDED_PAWN_BONUS * (w_defended_count - b_defended_count);
+}
+
+
+
 static inline int evaluate_position(struct GameState* Game, int alpha, int beta) {
 
     int phase = Game->eval.white_phase + Game->eval.black_phase;
@@ -215,6 +238,8 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
     int isolated_pawns_score = evaluate_isolated_pawns(Game->eval.white_pawns) - evaluate_isolated_pawns(Game->eval.black_pawns);
     score += ((MAX_PHASE - phase) * isolated_pawns_score) / MAX_PHASE;
 
+    int defended_pawns_score = evaluate_defended_pawns(Game->eval.white_pawns, Game->eval.black_pawns);
+    score += ((MAX_PHASE - phase) * defended_pawns_score) / MAX_PHASE;
 
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
 
