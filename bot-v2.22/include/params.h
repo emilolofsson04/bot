@@ -33,12 +33,12 @@
 #define MAX_PHASE                  24
 
 #define BISHOP_PAIR_MG             10
-#define BISHOP_PAIR_EG             10
+#define BISHOP_PAIR_EG             30
 #define DOUBLED_PAWN_MG             5
-#define DOUBLED_PAWN_EG             5
-#define ISOLATED_PAWN_MG           10
-#define ISOLATED_PAWN_EG           10
-#define DEFENDED_PAWN_MG           10 
+#define DOUBLED_PAWN_EG            15 
+#define ISOLATED_PAWN_MG            5
+#define ISOLATED_PAWN_EG           15 
+#define DEFENDED_PAWN_MG            5 
 #define DEFENDED_PAWN_EG           10 
 
 #define PAWN_VALUE_CP             100

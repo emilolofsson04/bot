@@ -53,10 +53,10 @@ static inline int get_captured_index(Move move) {
 }
 
 
-typedef struct {
+struct score {
     int mg;
     int eg;
-} Score;
+};
 
 
 struct piece {

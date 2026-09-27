@@ -136,23 +136,24 @@ static inline int king_mobility_danger(struct GameState* Game) {
     return w_king_mobility - b_king_mobility;
 
 }
-static inline int evaluate_passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_pawns) {
+static inline struct score evaluate_passed_pawns(int side, uint64_t allied_pawns, uint64_t enemy_pawns) {
 
-    int total_bonus = 0;
-        
-    static const int passed_bonus[8] = { 0, 5, 10, 20, 45, 90, 160, 0 };
+    struct score eval = {0};
+    static const int passed_bonus_mg[8] = { 0,  3,  6, 12, 20, 35,  60, 0 };
+    static const int passed_bonus_eg[8] = { 0,  8, 15, 30, 55, 95, 160, 0 };
 
     while (allied_pawns) {
         int square = __builtin_ctzll(allied_pawns);
 
         if (!(passed_pawn_masks[side][square] & enemy_pawns)) {
             int relative_rank = (side == SIDE_WHITE) ? (square / 8) : (7 - (square / 8));
-            total_bonus += passed_bonus[relative_rank];
+            eval.mg += passed_bonus_mg[relative_rank];
+            eval.eg += passed_bonus_eg[relative_rank];
         }
 
         allied_pawns &= allied_pawns - 1;
     }
-    return total_bonus;
+    return eval;
 }
 
 static const uint64_t ADJACENT_FILES[8] = {
@@ -166,11 +167,11 @@ static const uint64_t ADJACENT_FILES[8] = {
     0x4040404040404040ULL
 };
 
-static inline int evaluate_isolated_pawns(uint64_t allied_pawns) {
+static inline struct score evaluate_isolated_pawns(uint64_t allied_pawns) {
 
     static const uint64_t FILE_A = 0x0101010101010101ULL;
 
-    int eval = 0;
+    struct score eval = {0};
     for (int file = 0; file < 8; file++) {
 
         if (!(ADJACENT_FILES[file] & allied_pawns)) {
@@ -178,15 +179,17 @@ static inline int evaluate_isolated_pawns(uint64_t allied_pawns) {
             uint64_t file_pawns = allied_pawns & (FILE_A << file);
             int count = __builtin_popcountll(file_pawns);
 
-            eval -= count;
+            eval.eg -= count * ISOLATED_PAWN_EG;
+            eval.mg -= count * ISOLATED_PAWN_MG;
         }
     }
     return eval;
 }
 
 
-static inline int evaluate_defended_pawns(uint64_t white_pawns, uint64_t black_pawns) {
+static inline struct score evaluate_defended_pawns(uint64_t white_pawns, uint64_t black_pawns) {
 
+    struct score eval = {0};
 
     static const uint64_t NOT_FILE_A = 0xfefefefefefefefeULL;
     static const uint64_t NOT_FILE_H = 0x7f7f7f7f7f7f7f7fULL;
@@ -202,7 +205,10 @@ static inline int evaluate_defended_pawns(uint64_t white_pawns, uint64_t black_p
     int b_defended_count = __builtin_popcountll(defended_black_pawns);
 
 
-    return (w_defended_count - b_defended_count);
+    eval.eg = w_defended_count * DEFENDED_PAWN_EG - b_defended_count * DEFENDED_PAWN_EG;
+    eval.mg = w_defended_count * DEFENDED_PAWN_MG - b_defended_count * DEFENDED_PAWN_MG;
+
+    return eval;
 }
 
 
@@ -236,18 +242,20 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
         }
     }
 
-    int passed_pawns_score = evaluate_passed_pawns(SIDE_WHITE, Game->eval.white_pawns, Game->eval.black_pawns) - evaluate_passed_pawns(SIDE_BLACK, Game->eval.black_pawns, Game->eval.white_pawns);
-    mg += 0 * passed_pawns_score;
-    eg += passed_pawns_score;
-    
-    int isolated_pawns = evaluate_isolated_pawns(Game->eval.white_pawns) - evaluate_isolated_pawns(Game->eval.black_pawns);
-    mg += 0 * ISOLATED_PAWN_MG * isolated_pawns;
-    eg += ISOLATED_PAWN_EG * isolated_pawns;
 
-    int defended_pawns = evaluate_defended_pawns(Game->eval.white_pawns, Game->eval.black_pawns);
-    mg += 0 * DEFENDED_PAWN_MG * defended_pawns;
-    eg += DEFENDED_PAWN_EG * defended_pawns;
+    struct score w_pass = evaluate_passed_pawns(SIDE_WHITE, Game->eval.white_pawns, Game->eval.black_pawns);
+    struct score b_pass = evaluate_passed_pawns(SIDE_BLACK, Game->eval.black_pawns, Game->eval.white_pawns);
+    mg += (w_pass.mg - b_pass.mg);
+    eg += (w_pass.eg - b_pass.eg);
 
+    struct score w_iso = evaluate_isolated_pawns(Game->eval.white_pawns);
+    struct score b_iso = evaluate_isolated_pawns(Game->eval.black_pawns);
+    mg -= (w_iso.mg - b_iso.mg);
+    eg -= (w_iso.eg - b_iso.eg);
+
+    struct score defended = evaluate_defended_pawns(Game->eval.white_pawns, Game->eval.black_pawns);
+    mg += defended.mg;
+    eg += defended.eg;
 
     int score = ((mg * phase) + (eg * (MAX_PHASE - phase)) + MAX_PHASE / 2) / MAX_PHASE;
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
