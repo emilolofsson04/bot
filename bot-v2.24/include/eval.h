@@ -5,8 +5,7 @@
 #include "pst.h"
 
 extern uint64_t passed_pawn_masks[2][64];
-extern uint64_t pawn_shield_near[2][64];
-extern uint64_t pawn_shield_far[2][64];
+extern uint64_t pawn_shield_masks[2][64];
 
 void init_evaluation_masks(void);
 
@@ -217,29 +216,47 @@ static inline struct score evaluate_defended_pawns(uint64_t white_pawns, uint64_
 
 #define NEAR_PAWN_SHIELD 10
 #define FAR_PAWN_SHIELD 5
+#define MISSING_SHIELD_PENALTY 10
 
 
 static inline struct score evaluate_pawn_shield(struct GameState* Game) {
     struct score eval = {0};
+    static const uint64_t FILE_A = 0x0101010101010101ULL;
 
     int w_sq = Game->white_king_square;
     int b_sq = Game->black_king_square;
 
-    uint64_t w_near_pawns = pawn_shield_near[SIDE_WHITE][w_sq] & Game->eval.white_pawns;
-    uint64_t w_far_pawns  = pawn_shield_far[SIDE_WHITE][w_sq]  & Game->eval.white_pawns;
+    int w_rank = w_sq / 8;
+    int b_rank = b_sq / 8;
 
-    int w_tot_near = __builtin_popcountll(w_near_pawns);
-    int w_tot_far  = __builtin_popcountll(w_far_pawns);
+    if (w_rank <= 1) {
+        uint64_t near_pawns = pawn_shield_masks[SIDE_WHITE][w_sq]     & Game->eval.white_pawns;
+        uint64_t far_pawns  = pawn_shield_masks[SIDE_WHITE][w_sq + 8] & Game->eval.white_pawns;
 
-    eval.mg += (w_tot_near * NEAR_PAWN_SHIELD) + (w_tot_far * FAR_PAWN_SHIELD);
+        eval.mg += (__builtin_popcountll(near_pawns) * NEAR_PAWN_SHIELD)
+                 + (__builtin_popcountll(far_pawns)  * FAR_PAWN_SHIELD);
+        int f = w_sq % 8;
+        if (!(Game->eval.white_pawns & (FILE_A << f))) eval.mg -= MISSING_SHIELD_PENALTY;
+        if (f > 0 && !(Game->eval.white_pawns & (FILE_A << (f - 1)))) eval.mg -= MISSING_SHIELD_PENALTY;
+        if (f < 7 && !(Game->eval.white_pawns & (FILE_A << (f + 1)))) eval.mg -= MISSING_SHIELD_PENALTY;
 
-    uint64_t b_near_pawns = pawn_shield_near[SIDE_BLACK][b_sq] & Game->eval.black_pawns;
-    uint64_t b_far_pawns  = pawn_shield_far[SIDE_BLACK][b_sq]  & Game->eval.black_pawns;
+    } else {
+        eval.mg -= 25; 
+    }
 
-    int b_tot_near = __builtin_popcountll(b_near_pawns);
-    int b_tot_far  = __builtin_popcountll(b_far_pawns);
+    if (b_rank >= 6) {
+        uint64_t near_pawns = pawn_shield_masks[SIDE_BLACK][b_sq]     & Game->eval.black_pawns;
+        uint64_t far_pawns  = pawn_shield_masks[SIDE_BLACK][b_sq - 8] & Game->eval.black_pawns;
 
-    eval.mg -= (b_tot_near * NEAR_PAWN_SHIELD) + (b_tot_far * FAR_PAWN_SHIELD);
+        eval.mg -= (__builtin_popcountll(near_pawns) * NEAR_PAWN_SHIELD)
+                 + (__builtin_popcountll(far_pawns)  * FAR_PAWN_SHIELD);
+        int f = b_sq % 8;
+        if (!(Game->eval.black_pawns & (FILE_A << f))) eval.mg += MISSING_SHIELD_PENALTY;
+        if (f > 0 && !(Game->eval.black_pawns & (FILE_A << (f - 1)))) eval.mg += MISSING_SHIELD_PENALTY;
+        if (f < 7 && !(Game->eval.black_pawns & (FILE_A << (f + 1)))) eval.mg += MISSING_SHIELD_PENALTY;
+    } else {
+        eval.mg += 25; 
+    }
 
     return eval;
 }

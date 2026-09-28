@@ -1,7 +1,6 @@
 #include "types.h"
 uint64_t passed_pawn_masks[2][64];
-uint64_t pawn_shield_near[2][64];
-uint64_t pawn_shield_far[2][64];
+uint64_t pawn_shield_masks[2][64];
 
 void init_evaluation_masks(void) {
     const uint64_t FILE_A = 0x0101010101010101ULL;
@@ -22,17 +21,10 @@ void init_evaluation_masks(void) {
         passed_pawn_masks[SIDE_BLACK][sq] = files & b_below;
        
 
-        uint64_t w_rank1 = (r + 1 < 8) ? (0xFFULL << (8 * (r + 1))) : 0ULL;
-        uint64_t w_rank2 = (r + 2 < 8) ? (0xFFULL << (8 * (r + 2))) : 0ULL;
+        uint64_t w_rank = (r + 1 < 8) ? (0xFFULL << (8 * (r + 1))) : 0ULL;
+        pawn_shield_masks[SIDE_WHITE][sq] = files & w_rank;
 
-        pawn_shield_near[SIDE_WHITE][sq] = files & w_rank1;
-        pawn_shield_far[SIDE_WHITE][sq]  = files & w_rank2;
-
-        // Black: 1 rank down and 2 ranks down
-        uint64_t b_rank1 = (r - 1 >= 0) ? (0xFFULL << (8 * (r - 1))) : 0ULL;
-        uint64_t b_rank2 = (r - 2 >= 0) ? (0xFFULL << (8 * (r - 2))) : 0ULL;
-
-        pawn_shield_near[SIDE_BLACK][sq] = files & b_rank1;
-        pawn_shield_far[SIDE_BLACK][sq]  = files & b_rank2;
+        uint64_t b_rank = (r - 1 >= 0) ? (0xFFULL << (8 * (r - 1))) : 0ULL;
+        pawn_shield_masks[SIDE_BLACK][sq] = files & b_rank;
     }
 }
