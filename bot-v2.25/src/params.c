@@ -21,6 +21,7 @@ static const struct OptionDef OPTIONS_TABLE[] = {
     {"NMPBaseReduction",   &Params.nmp_base_reduction,      DEFAULT_NMP_BASE_REDUCTION,    1,   5},
     {"NMPMinDepth",        &Params.nmp_min_depth,                DEFAULT_NMP_MIN_DEPTH,    1,  10},
     {"NMPDepthReduction",  &Params.nmp_depth_divisor,        DEFAULT_NMP_DEPTH_DIVISOR,    1,  10},
+    {"MultiPV",            &Params.multi_pv,                                         1,    1,   20},
 };
 
 int NUM_OPTIONS = sizeof(OPTIONS_TABLE) / sizeof(OPTIONS_TABLE[0]);

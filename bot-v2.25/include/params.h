@@ -60,6 +60,7 @@ struct SearchParams {
     int nmp_base_reduction;
     int nmp_min_depth;
     int nmp_depth_divisor;
+    int multi_pv;
 };
 
 extern struct SearchParams Params;

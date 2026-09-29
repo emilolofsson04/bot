@@ -260,6 +260,7 @@ static inline struct score evaluate_pawn_shield(struct GameState* Game) {
 
     return eval;
 }
+
 static inline int evaluate_position(struct GameState* Game, int alpha, int beta) {
 
     int phase = Game->eval.white_phase + Game->eval.black_phase;

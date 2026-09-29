@@ -177,6 +177,9 @@ struct EngineStats {
 struct RootMove {
     Move Move;
     int eval;
+    Move pv_line[64];
+    int pv_length;
+    int seldepth;
 };
 
 

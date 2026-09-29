@@ -1,5 +1,6 @@
 #include "types.h"
 uint64_t passed_pawn_masks[2][64];
+uint64_t pawn_shield_masks[2][64];
 
 void init_evaluation_masks(void) {
     const uint64_t FILE_A = 0x0101010101010101ULL;
@@ -18,7 +19,12 @@ void init_evaluation_masks(void) {
 
         uint64_t b_below = (r <= 0) ? 0ULL : ((1ULL << (8 * r)) - 1ULL);
         passed_pawn_masks[SIDE_BLACK][sq] = files & b_below;
+       
+
+        uint64_t w_rank = (r + 1 < 8) ? (0xFFULL << (8 * (r + 1))) : 0ULL;
+        pawn_shield_masks[SIDE_WHITE][sq] = files & w_rank;
+
+        uint64_t b_rank = (r - 1 >= 0) ? (0xFFULL << (8 * (r - 1))) : 0ULL;
+        pawn_shield_masks[SIDE_BLACK][sq] = files & b_rank;
     }
 }
-
-
