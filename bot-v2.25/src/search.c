@@ -469,7 +469,7 @@ static inline void cutoff_updates(struct NodeState Node, struct SearchContext* S
 
         int ss = get_from_square(move);
         int ts = get_to_square(move);
-        Search->history_table[ss][ts] += (Node.depth * Node.depth + 5) / 5;
+        Search->history_table[ss][ts] += (Node.depth * Node.depth + 5) / 5 ;
         if (Search->history_table[ss][ts] > 999999) {
             Search->history_table[ss][ts] = 999999;
         }
@@ -539,7 +539,7 @@ static inline int null_prune(struct GameState* Game, struct NodeState Node, stru
     int R = Params.nmp_base_reduction + Node.depth / Params.nmp_depth_divisor ;
     
     if (!pv_node && Node.depth >= Params.nmp_min_depth && has_non_pawn_material(Game) && !Node.in_check) {
-    
+
         int reduced_depth = Node.depth - 1 - R;
         if (reduced_depth < 1) reduced_depth = 1;
 
@@ -601,7 +601,7 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     Move hash_move = 0;
     int tt_eval;
     int tt_cutoff = probe_tt(&hash_move, alpha, beta, &tt_eval, Search, Node, Game);
-    if (tt_cutoff) {
+    if (!pv_node && tt_cutoff) {
         Search->pvLength[Node.ply] = Node.ply;
         return tt_eval;
     }
@@ -675,8 +675,6 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
         if (is_alpha_beta_cutoff(alpha, beta)) {
             cutoff_updates(Node, Search, move);
-
-
             break;
         }
     }
@@ -714,7 +712,8 @@ static inline void sort_rootmoves(struct RootMove root_moves[256], int move_coun
     }
 }
 
-static inline int get_nth_best_score(struct RootMove root_moves[], int count, int n) {
+static inline int get_nth_best_score(struct RootMove root_moves[], int count) {
+    int n = Params.multi_pv;
     if (n > count) n = count;
 
     int scores[256];
@@ -733,7 +732,7 @@ static inline int get_nth_best_score(struct RootMove root_moves[], int count, in
     return scores[n - 1];
 }
 
-static inline void update_multi_pv(struct NodeState* Node, struct SearchContext* Search, Move move, int move_nmbr, struct RootMove* root_move) {
+static inline void update_multi_pv(struct NodeState* Node, struct SearchContext* Search, Move move, struct RootMove* root_move) {
 
 
     // Update pv
@@ -750,6 +749,14 @@ static inline void update_multi_pv(struct NodeState* Node, struct SearchContext*
 
 }
 
+static inline void update_alpha_multi_pv(int k, struct RootMove root_moves[256], int* alpha) {
+    if (k + 1 >= Params.multi_pv) {
+        int nth_score = get_nth_best_score(root_moves, k + 1);
+        if (nth_score > *alpha) {
+                *alpha = nth_score;
+        }
+    }
+}
 
 static inline int search_root(struct GameState* Game, struct SearchContext* Search, struct NodeState Node, int alpha, int beta, struct RootMove root_moves[256], int move_count) {
 
@@ -789,13 +796,9 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
 
         update_best(&best_score, &best_move, move, branch_eval);
 
-        update_multi_pv(&Node, Search, move, k, &root_moves[k]);
-        if (k + 1 >= Params.multi_pv) {
-            int nth_score = get_nth_best_score(root_moves, k + 1, Params.multi_pv);
-            if (nth_score > alpha) {
-                alpha = nth_score;
-            }
-        }
+        update_multi_pv(&Node, Search, move, &root_moves[k]);
+        
+        update_alpha_multi_pv(k, root_moves, &alpha);
     }
 
     return best_score;

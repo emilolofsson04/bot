@@ -306,9 +306,9 @@ static int quiescence_search(struct GameState* Game, struct NodeState Node, stru
         struct UndoInfo ui;
         make_move(move, Game, &ui); 
 
-        int new_move_check = move_gives_check(Game, move);
+        int move_check = move_gives_check(Game, move);
 
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = move_check };
         branchEval = -quiescence_search(Game, child_node, Search, -beta, -alpha, checkBuffer);
 
         // Evaluate alpha beta values
@@ -469,7 +469,7 @@ static inline void cutoff_updates(struct NodeState Node, struct SearchContext* S
 
         int ss = get_from_square(move);
         int ts = get_to_square(move);
-        Search->history_table[ss][ts] += (Node.depth * Node.depth + 5) / 5;
+        Search->history_table[ss][ts] += (Node.depth * Node.depth);
         if (Search->history_table[ss][ts] > 999999) {
             Search->history_table[ss][ts] = 999999;
         }
@@ -539,7 +539,7 @@ static inline int null_prune(struct GameState* Game, struct NodeState Node, stru
     int R = Params.nmp_base_reduction + Node.depth / Params.nmp_depth_divisor ;
     
     if (!pv_node && Node.depth >= Params.nmp_min_depth && has_non_pawn_material(Game) && !Node.in_check) {
-    
+
         int reduced_depth = Node.depth - 1 - R;
         if (reduced_depth < 1) reduced_depth = 1;
 
@@ -601,7 +601,7 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     Move hash_move = 0;
     int tt_eval;
     int tt_cutoff = probe_tt(&hash_move, alpha, beta, &tt_eval, Search, Node, Game);
-    if (tt_cutoff) {
+    if (!pv_node && tt_cutoff) {
         Search->pvLength[Node.ply] = Node.ply;
         return tt_eval;
     }
@@ -675,9 +675,14 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
         if (is_alpha_beta_cutoff(alpha, beta)) {
             cutoff_updates(Node, Search, move);
-
-
             break;
+        }
+        else {
+            if (get_capture_flag(move) == QUIET) {
+                int ss = get_from_square(move);
+                int ts = get_to_square(move);
+                Search->history_table[ss][ts] -= (Node.depth * Node.depth);
+            }
         }
     }
 
@@ -714,6 +719,52 @@ static inline void sort_rootmoves(struct RootMove root_moves[256], int move_coun
     }
 }
 
+static inline int get_nth_best_score(struct RootMove root_moves[], int count) {
+    int n = Params.multi_pv;
+    if (n > count) n = count;
+
+    int scores[256];
+    for (int i = 0; i < count; i++) scores[i] = root_moves[i].eval;
+
+    for (int i = 0; i < n; i++) {
+        int max_idx = i;
+        for (int j = i + 1; j < count; j++) {
+            if (scores[j] > scores[max_idx]) max_idx = j;
+        }
+        int tmp = scores[i];
+        scores[i] = scores[max_idx];
+        scores[max_idx] = tmp;
+    }
+
+    return scores[n - 1];
+}
+
+static inline void update_multi_pv(struct NodeState* Node, struct SearchContext* Search, Move move, struct RootMove* root_move) {
+
+
+    // Update pv
+    root_move->pv_line[Node->ply] = move;
+
+    // Copy child line
+    for (int i = Node->ply + 1; i < Search->pvLength[Node->ply + 1]; i++) {
+        root_move->pv_line[i] = Search->pvTable[Node->ply + 1][i];
+    }
+    root_move->pv_length = Search->pvLength[Node->ply + 1];
+
+    root_move->seldepth = Search->max_sel_depth;
+    Search->max_sel_depth = 0;
+
+}
+
+static inline void update_alpha_multi_pv(int k, struct RootMove root_moves[256], int* alpha) {
+    if (k + 1 >= Params.multi_pv) {
+        int nth_score = get_nth_best_score(root_moves, k + 1);
+        if (nth_score > *alpha) {
+                *alpha = nth_score;
+        }
+    }
+}
+
 static inline int search_root(struct GameState* Game, struct SearchContext* Search, struct NodeState Node, int alpha, int beta, struct RootMove root_moves[256], int move_count) {
 
     /* Starts the searching by calling negamax */
@@ -729,11 +780,11 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
         struct UndoInfo ui;
         make_move(move, Game, &ui);
 
-        int new_move_check = move_gives_check(Game, move);
-        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = new_move_check };
+        int move_check = move_gives_check(Game, move);
+        struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = move_check };
 
 
-        if (k == 0) {
+        if (k < Params.multi_pv) {
             branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
         }
         else {
@@ -752,7 +803,9 @@ static inline int search_root(struct GameState* Game, struct SearchContext* Sear
 
         update_best(&best_score, &best_move, move, branch_eval);
 
-        update_alpha_and_pv(&Node, &alpha, Search, branch_eval, move);
+        update_multi_pv(&Node, Search, move, &root_moves[k]);
+        
+        update_alpha_multi_pv(k, root_moves, &alpha);
     }
 
     return best_score;
@@ -791,7 +844,7 @@ Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
         int alpha = NEGATIVE_INFINITY;
         int beta  = POSITIVE_INFINITY;
 
-        if (iteration_depth > Params.aspiration_min_depth) {
+        if (Params.multi_pv == 1 && iteration_depth > Params.aspiration_min_depth) {
             int aspiration_delta = Params.aspiration_delta;
             alpha = last_eval - aspiration_delta;
             beta = last_eval + aspiration_delta;
@@ -824,7 +877,14 @@ Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
             (Search->now.tv_sec - Search->start.tv_sec) +
             (Search->now.tv_nsec - Search->start.tv_nsec) / 1e9;
 
-        if (!Search->silent) write_info(root_moves[0].eval, iteration_depth, Search->max_sel_depth, Search->nodes, time_taken, Search->pvLength[0], Search->pvTable);
+        if (!Search->silent) {
+            int lines_to_print = (Params.multi_pv < move_count) ? Params.multi_pv : move_count;
+            for (int i = 0; i < lines_to_print; i++) {
+                write_info(root_moves[i].eval, iteration_depth,
+                                  root_moves[i].seldepth, Search->nodes, time_taken,
+                                  root_moves[i].pv_length, root_moves[i].pv_line, i + 1);
+            }
+        }
 
         if (Search->time_limit_ms) {
             if (previous_nodes) bf = (double)Search->nodes/previous_nodes;

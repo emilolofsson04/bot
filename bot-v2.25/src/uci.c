@@ -151,7 +151,7 @@ void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, floa
             end_of_str++;
         }
     }
-    ponder_str[end_of_str] = '\0'; // I trust no null termination but my own
+    ponder_str[end_of_str - 1] = '\0'; // I trust no null termination but my own
 
     char* eval_string = (abs(evaluation) > MATE_IN_100_SCORE) ? "mate" : "cp  "; 
     if (evaluation > MATE_IN_100_SCORE) evaluation = (MATE_SCORE - evaluation) / 2 + 1;

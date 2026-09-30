@@ -308,6 +308,8 @@ static inline int evaluate_position(struct GameState* Game, int alpha, int beta)
     struct score pawn_shield = evaluate_pawn_shield(Game);
     mg += pawn_shield.mg;
 
+    mg += (Game->side_to_move == SIDE_WHITE) ? 20 : -20;
+
     int score = ((mg * phase) + (eg * (MAX_PHASE - phase)) + MAX_PHASE / 2) / MAX_PHASE;
     score = (Game->side_to_move == SIDE_WHITE) ? score : -score;
 

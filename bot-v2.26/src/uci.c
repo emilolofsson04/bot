@@ -132,7 +132,7 @@ int get_hashfull(void) {
     return (count * 1000) / sample_size;
 }
 
-void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, float time, int pvLength, uint32_t pvTable[64][64]) {
+void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, float time, int pvLength, uint32_t pvTable[64], int multi_pv) {
 
     /* Writes info from bot */
 
@@ -143,7 +143,7 @@ void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, floa
 
     for (int i = 0; i < move_to_print; i++) {
 
-        end_of_str += move_to_uci_string(pvTable[0][i], &ponder_str[end_of_str]); // Shift end with length of move string
+        end_of_str += move_to_uci_string(pvTable[i], &ponder_str[end_of_str]); // Shift end with length of move string
 
         // Sprintf null terminates, so we overwrite it except if its the last move
         if (i != pvLength) {
@@ -151,12 +151,12 @@ void write_info(int evaluation, int currentdepth, int sel_depth, int nodes, floa
             end_of_str++;
         }
     }
-    ponder_str[end_of_str] = '\0'; // I trust no null termination but my own
+    ponder_str[end_of_str - 1] = '\0'; // I trust no null termination but my own
 
     char* eval_string = (abs(evaluation) > MATE_IN_100_SCORE) ? "mate" : "cp  "; 
     if (evaluation > MATE_IN_100_SCORE) evaluation = (MATE_SCORE - evaluation) / 2 + 1;
     if (evaluation < -MATE_IN_100_SCORE) evaluation = (-MATE_SCORE - evaluation) / 2 - 1;
-    printf("info depth %2d seldepth %2d score %4s %4d nodes %9d nps %8.f hashfull %4d time %5.f pv %s\n", currentdepth, sel_depth, eval_string, evaluation, nodes, nodes/(time), get_hashfull(), 1000*time, ponder_str);
+    printf("info depth %2d seldepth %2d multipv %d score %4s %4d nodes %9d nps %8.f hashfull %4d time %5.f pv %s\n", currentdepth, sel_depth, multi_pv, eval_string, evaluation, nodes, nodes/(time), get_hashfull(), 1000*time, ponder_str);
 
     fflush(stdout);
 }

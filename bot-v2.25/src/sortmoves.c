@@ -25,23 +25,9 @@ static inline int mvv_lva(struct GameState* Game, Move move) {
     int attacking_value = piece_ranks[abs(attacking_piece)];
     int defending_value = piece_ranks[abs(defending_piece)];
 
-    // Assert it's correct values (spots a suprising amount of buGame)
     assert(attacking_value > 0 && attacking_value <= 6);
     assert(defending_value > 0 && defending_value <= 6);
 
-    if (0 && defending_value < attacking_value) {
-        int enemy_pawn = Game->side_to_move ? -PAWN : PAWN;
-        int pawn_dir = Game->side_to_move ? 1 : -1;
-
-        
-        if ((target_rank + pawn_dir >= 0 && target_rank + pawn_dir < 8)) {
-            if (((target_file + 1 < 8) && Game->board[target_rank + pawn_dir][target_file + 1] == enemy_pawn) 
-                || (target_file - 1 >= 0 && Game->board[target_rank + pawn_dir][target_file - 1] == enemy_pawn)) return -10000000 + 10 * defending_value - attacking_value;
-        }
-        
-    }
-
-    // Standard mvv_lva
     eval = 10 * (defending_value) - attacking_value;
 
     return eval;
