@@ -33,7 +33,7 @@ static inline int mvv_lva(struct GameState* Game, Move move) {
     return eval;
 }
 
-void evaluate_moves_quiescence(struct GameState* Game, Move legal_moves[256], int total_legal_moves, int evals[256], int history_table[2][64][64]) {
+void evaluate_moves_quiescence(struct GameState* Game, Move legal_moves[256], int total_legal_moves, int evals[256], int history_table[64][64]) {
 
 
     for (int i = 0; i < total_legal_moves; i++) {
@@ -45,14 +45,14 @@ void evaluate_moves_quiescence(struct GameState* Game, Move legal_moves[256], in
         else { // else history table and killer moves
             int ss = get_from_square(legal_moves[i]);
             int ts = get_to_square(legal_moves[i]);
-            evals[i] += history_table[Game->side_to_move][ss][ts];
+            evals[i] += history_table[ss][ts];
         }
     }
 }
 
 
 
-void sort_moves_quiescence(struct GameState* Game, Move legal_moves[256], int total_legal_moves, int eval_order[256], int history_table[2][64][64]) {
+void sort_moves_quiescence(struct GameState* Game, Move legal_moves[256], int total_legal_moves, int eval_order[256], int history_table[64][64]) {
 
     int evals[256] = {0};
 
@@ -66,7 +66,7 @@ void sort_moves_quiescence(struct GameState* Game, Move legal_moves[256], int to
         else { // else history table and killer moves
             int ss = get_from_square(legal_moves[i]);
             int ts = get_to_square(legal_moves[i]);
-            evals[i] += history_table[Game->side_to_move][ss][ts];
+            evals[i] += history_table[ss][ts];
         }
     }
     // Sort
@@ -103,7 +103,7 @@ void evaluate_moves(struct GameState* Game, Move legal_moves[256], int total_leg
         else { // else history table and killer moves
             int ss = get_from_square(legal_moves[i]);
             int ts = get_to_square(legal_moves[i]);
-            eval[i] += Search->history_table[Game->side_to_move][ss][ts];
+            eval[i] += Search->history_table[ss][ts];
 
             for (int k = 0; k < 2; k++) {
                 if (moves_match(legal_moves[i], Search->killer_moves[Node.ply][k])) {

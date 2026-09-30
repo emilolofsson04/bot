@@ -458,7 +458,7 @@ static inline int is_alpha_beta_cutoff(int alpha, int beta) {
     return beta <= alpha;
 }
 
-static inline void cutoff_updates(int side_to_move, struct NodeState Node, struct SearchContext* Search, Move move) {
+static inline void cutoff_updates(struct NodeState Node, struct SearchContext* Search, Move move) {
 
     /* Updates move heuristics based on cutoff */
 
@@ -469,9 +469,9 @@ static inline void cutoff_updates(int side_to_move, struct NodeState Node, struc
 
         int ss = get_from_square(move);
         int ts = get_to_square(move);
-        Search->history_table[side_to_move][ss][ts] += (Node.depth * Node.depth + 5) / 5;
-        if (Search->history_table[side_to_move][ss][ts] > 999999) {
-            Search->history_table[side_to_move][ss][ts] = 999999;
+        Search->history_table[ss][ts] += (Node.depth * Node.depth + 5) / 5 ;
+        if (Search->history_table[ss][ts] > 999999) {
+            Search->history_table[ss][ts] = 999999;
         }
     }
 }
@@ -598,12 +598,19 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
 
     int pv_node = (beta - alpha > 1);
 
+
     Move hash_move = 0;
     int tt_eval;
     int tt_cutoff = probe_tt(&hash_move, alpha, beta, &tt_eval, Search, Node, Game);
     if (!pv_node && tt_cutoff) {
         Search->pvLength[Node.ply] = Node.ply;
         return tt_eval;
+    }
+
+    int eval = evaluate_position(Game, alpha, beta);
+    int margin = 75 * Node.depth; // e.g. 150 * depth
+    if (!pv_node && Node.depth <= 2 && !Node.in_check && eval >= beta + margin) {
+        return beta; // fail soft
     }
 
     int null_eval;
@@ -638,12 +645,17 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
                                                               
         int move_check = move_gives_check(Game, move);
 
+        if (eval + margin < alpha && Node.depth <= 2 && !move_check && !Node.in_check && get_capture_flag(move) == QUIET) {
+            unmake_move(move, Game, &ui);
+            continue;
+        }
 
         if (pv_node && k == 0) {
             struct NodeState child_node = { .ply = Node.ply + 1, .depth = Node.depth - 1, .in_check = move_check };
             branch_eval = -negamax(Game, Search, child_node, -beta, -alpha);
         }
         else {
+
 
             int target_depth = Node.depth - 1;
             int reduced_depth = target_depth;
@@ -674,15 +686,8 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
         update_alpha_and_pv(&Node, &alpha, Search, branch_eval, move);
 
         if (is_alpha_beta_cutoff(alpha, beta)) {
-            cutoff_updates(Game->side_to_move, Node, Search, move);
+            cutoff_updates(Node, Search, move);
             break;
-        }
-        else {
-            if (get_capture_flag(move) == QUIET) {
-                int ss = get_from_square(move);
-                int ts = get_to_square(move);
-                Search->history_table[Game->side_to_move][ss][ts] -= (Node.depth * Node.depth + 5) / 5;
-            }
         }
     }
 
@@ -692,14 +697,13 @@ int negamax(struct GameState* Game, struct SearchContext* Search, struct NodeSta
     return best;
 }
 
-static inline void half_array(int array[2][64][64]) {
+static inline void half_array(int array[64][64]) {
 
     /* Half the entries in the array (currently unused for history) */
 
     for (int to = 0; to < 64; to++) {
         for (int from = 0; from < 64; from++) {
-            array[0][from][to] = (array[0][from][to] >> 1);
-            array[1][from][to] = (array[1][from][to] >> 1);
+            array[from][to] = (array[from][to] >> 1);
         }
     }
 }
@@ -871,7 +875,7 @@ Move iterative_deepening(struct GameState* Game, struct SearchContext* Search) {
         sort_rootmoves(root_moves, move_count);
         best_move = root_moves[0].Move;
 
-        half_array(Search->history_table);
+        //half_array(Search->history_table);
 
         clock_gettime(CLOCK_MONOTONIC, &Search->now);
         double time_taken =

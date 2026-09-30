@@ -190,7 +190,7 @@ struct SearchContext {
     int pvLength[64];
 
     Move killer_moves[64][2];
-    int history_table[2][64][64];
+    int history_table[64][64];
 
     int max_sel_depth;
 
